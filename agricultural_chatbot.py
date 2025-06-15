@@ -177,10 +177,39 @@ def get_role_specific_prompt(user_role, question, location=""):
     
     return base_prompt + structured_format
 
-def get_ai_response(client, user_role, question, location=""):
-    """Get AI response based on user role and question for Indonesian context"""
+def get_ai_response(client, user_role, question, location="", parameters=None, crop_type="general"):
+    """Get AI response based on user role and question for Indonesian context with parameter analysis"""
     try:
+        # Base prompt
         prompt = get_role_specific_prompt(user_role, question, location)
+        
+        # Add parameter analysis if provided
+        if parameters:
+            parameter_summary = format_parameter_summary(parameters)
+            parameter_analysis = analyze_parameters(parameters, crop_type)
+            
+            parameter_context = f"""
+            
+            {parameter_summary}
+            
+            **Analisis Parameter Otomatis:**
+            
+            *Kondisi Edafik (Tanah):* {parameter_analysis['edaphic']['status'].title()}
+            {('- Masalah: ' + '; '.join(parameter_analysis['edaphic']['issues'])) if parameter_analysis['edaphic']['issues'] else '- Kondisi tanah dalam rentang optimal'}
+            {('- Rekomendasi: ' + '; '.join(parameter_analysis['edaphic']['recommendations'])) if parameter_analysis['edaphic']['recommendations'] else ''}
+            
+            *Kondisi Hidrologik (Air):* {parameter_analysis['hydrologic']['status'].title()}
+            {('- Masalah: ' + '; '.join(parameter_analysis['hydrologic']['issues'])) if parameter_analysis['hydrologic']['issues'] else '- Kondisi air dalam rentang optimal'}
+            {('- Rekomendasi: ' + '; '.join(parameter_analysis['hydrologic']['recommendations'])) if parameter_analysis['hydrologic']['recommendations'] else ''}
+            
+            *Kondisi Atmosferik (Iklim):* {parameter_analysis['atmospheric']['status'].title()}
+            {('- Masalah: ' + '; '.join(parameter_analysis['atmospheric']['issues'])) if parameter_analysis['atmospheric']['issues'] else '- Kondisi iklim dalam rentang optimal'}
+            {('- Rekomendasi: ' + '; '.join(parameter_analysis['atmospheric']['recommendations'])) if parameter_analysis['atmospheric']['recommendations'] else ''}
+            
+            **PENTING: Gunakan data parameter dan analisis di atas untuk memberikan rekomendasi yang lebih spesifik dan akurat dalam respons Anda.**
+            """
+            
+            prompt += parameter_context
         
         completion = client.chat.completions.create(
             model="mistralai/mistral-tiny",
@@ -195,7 +224,7 @@ def get_ai_response(client, user_role, question, location=""):
                 }
             ],
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=1800
         )
         
         return completion.choices[0].message.content
@@ -232,6 +261,259 @@ def search_knowledge_base(query):
                             })
     
     return results
+
+# Parameter definitions for comprehensive agricultural analysis
+AGRICULTURAL_PARAMETERS = {
+    "edaphic": {
+        "n_content": {
+            "name": "Nitrogen (N)",
+            "unit": "%",
+            "description": "Kandungan nitrogen dalam tanah",
+            "optimal_range": {"padi": (0.15, 0.25), "jagung": (0.12, 0.20), "cabai": (0.20, 0.30)},
+            "min_val": 0.0,
+            "max_val": 1.0,
+            "default": 0.15
+        },
+        "p_content": {
+            "name": "Phosphorus (P)",
+            "unit": "%",
+            "description": "Kandungan fosfor dalam tanah",
+            "optimal_range": {"padi": (0.08, 0.15), "jagung": (0.10, 0.18), "cabai": (0.12, 0.20)},
+            "min_val": 0.0,
+            "max_val": 0.5,
+            "default": 0.10
+        },
+        "k_content": {
+            "name": "Potassium (K)",
+            "unit": "%",
+            "description": "Kandungan kalium dalam tanah",
+            "optimal_range": {"padi": (0.15, 0.25), "jagung": (0.18, 0.28), "cabai": (0.20, 0.35)},
+            "min_val": 0.0,
+            "max_val": 1.0,
+            "default": 0.18
+        },
+        "ph_level": {
+            "name": "pH Tanah",
+            "unit": "",
+            "description": "Tingkat keasaman tanah",
+            "optimal_range": {"padi": (5.5, 6.5), "jagung": (6.0, 7.0), "cabai": (6.0, 6.8)},
+            "min_val": 3.0,
+            "max_val": 9.0,
+            "default": 6.0
+        },
+        "organic_matter": {
+            "name": "Bahan Organik",
+            "unit": "%",
+            "description": "Kandungan bahan organik dalam tanah",
+            "optimal_range": {"general": (2.5, 5.0)},
+            "min_val": 0.0,
+            "max_val": 10.0,
+            "default": 3.0
+        },
+        "soil_temperature": {
+            "name": "Suhu Tanah",
+            "unit": "°C",
+            "description": "Suhu tanah pada kedalaman 10cm",
+            "optimal_range": {"padi": (25, 35), "jagung": (20, 30), "cabai": (20, 28)},
+            "min_val": 10.0,
+            "max_val": 45.0,
+            "default": 27.0
+        },
+        "soil_density": {
+            "name": "Kepadatan Tanah",
+            "unit": "g/cm³",
+            "description": "Bulk density tanah",
+            "optimal_range": {"general": (1.0, 1.4)},
+            "min_val": 0.8,
+            "max_val": 2.0,
+            "default": 1.2
+        }
+    },
+    "hydrologic": {
+        "rainfall": {
+            "name": "Curah Hujan",
+            "unit": "mm/bulan",
+            "description": "Curah hujan bulanan",
+            "optimal_range": {"padi": (150, 300), "jagung": (100, 200), "cabai": (80, 150)},
+            "min_val": 0.0,
+            "max_val": 1000.0,
+            "default": 200.0
+        },
+        "water_table": {
+            "name": "Kedalaman Air Tanah",
+            "unit": "cm",
+            "description": "Kedalaman muka air tanah dari permukaan",
+            "optimal_range": {"padi": (0, 15), "jagung": (50, 100), "cabai": (40, 80)},
+            "min_val": 0.0,
+            "max_val": 300.0,
+            "default": 50.0
+        },
+        "drainage_rate": {
+            "name": "Laju Drainase",
+            "unit": "cm/jam",
+            "description": "Kecepatan drainase air dalam tanah",
+            "optimal_range": {"general": (0.5, 2.0)},
+            "min_val": 0.0,
+            "max_val": 10.0,
+            "default": 1.0
+        },
+        "irrigation_frequency": {
+            "name": "Frekuensi Irigasi",
+            "unit": "hari",
+            "description": "Interval pemberian air irigasi",
+            "optimal_range": {"padi": (1, 3), "jagung": (3, 7), "cabai": (2, 4)},
+            "min_val": 1.0,
+            "max_val": 30.0,
+            "default": 3.0
+        },
+        "water_quality_ec": {
+            "name": "EC Air",
+            "unit": "dS/m",
+            "description": "Electrical Conductivity air irigasi",
+            "optimal_range": {"general": (0.25, 0.75)},
+            "min_val": 0.0,
+            "max_val": 5.0,
+            "default": 0.5
+        }
+    },
+    "atmospheric": {
+        "air_temperature": {
+            "name": "Suhu Udara",
+            "unit": "°C",
+            "description": "Suhu udara rata-rata harian",
+            "optimal_range": {"padi": (25, 35), "jagung": (20, 30), "cabai": (20, 28)},
+            "min_val": 10.0,
+            "max_val": 45.0,
+            "default": 28.0
+        },
+        "humidity": {
+            "name": "Kelembaban Relatif",
+            "unit": "%",
+            "description": "Kelembaban udara relatif",
+            "optimal_range": {"padi": (70, 85), "jagung": (60, 75), "cabai": (60, 70)},
+            "min_val": 30.0,
+            "max_val": 100.0,
+            "default": 75.0
+        },
+        "wind_speed": {
+            "name": "Kecepatan Angin",
+            "unit": "km/jam",
+            "description": "Kecepatan angin rata-rata",
+            "optimal_range": {"general": (5, 15)},
+            "min_val": 0.0,
+            "max_val": 50.0,
+            "default": 8.0
+        },
+        "solar_radiation": {
+            "name": "Radiasi Matahari",
+            "unit": "MJ/m²/hari",
+            "description": "Intensitas radiasi matahari harian",
+            "optimal_range": {"general": (15, 25)},
+            "min_val": 5.0,
+            "max_val": 35.0,
+            "default": 20.0
+        },
+        "photoperiod": {
+            "name": "Lama Penyinaran",
+            "unit": "jam/hari",
+            "description": "Durasi sinar matahari per hari",
+            "optimal_range": {"general": (10, 14)},
+            "min_val": 6.0,
+            "max_val": 16.0,
+            "default": 12.0
+        },
+        "atmospheric_pressure": {
+            "name": "Tekanan Udara",
+            "unit": "hPa",
+            "description": "Tekanan atmosfer",
+            "optimal_range": {"general": (1000, 1020)},
+            "min_val": 950.0,
+            "max_val": 1050.0,
+            "default": 1013.0
+        },
+        "co2_concentration": {
+            "name": "Konsentrasi CO₂",
+            "unit": "ppm",
+            "description": "Konsentrasi karbon dioksida di udara",
+            "optimal_range": {"general": (350, 450)},
+            "min_val": 300.0,
+            "max_val": 800.0,
+            "default": 400.0
+        }
+    }
+}
+
+def analyze_parameters(parameters, crop_type="general"):
+    """Analyze agricultural parameters and provide assessment"""
+    analysis = {
+        "edaphic": {"status": "optimal", "issues": [], "recommendations": []},
+        "hydrologic": {"status": "optimal", "issues": [], "recommendations": []},
+        "atmospheric": {"status": "optimal", "issues": [], "recommendations": []}
+    }
+    
+    for category, params in parameters.items():
+        if category in AGRICULTURAL_PARAMETERS:
+            for param_key, value in params.items():
+                if param_key in AGRICULTURAL_PARAMETERS[category]:
+                    param_info = AGRICULTURAL_PARAMETERS[category][param_key]
+                    
+                    # Get optimal range for the crop or general
+                    optimal_range = param_info["optimal_range"].get(crop_type) or param_info["optimal_range"].get("general")
+                    
+                    if optimal_range:
+                        min_opt, max_opt = optimal_range
+                        
+                        if value < min_opt:
+                            analysis[category]["status"] = "suboptimal"
+                            analysis[category]["issues"].append(f"{param_info['name']} terlalu rendah ({value} {param_info['unit']}, optimal: {min_opt}-{max_opt} {param_info['unit']})")
+                            
+                            # Add specific recommendations
+                            if param_key == "n_content":
+                                analysis[category]["recommendations"].append("Aplikasi pupuk nitrogen (urea/ZA) bertahap")
+                            elif param_key == "p_content":
+                                analysis[category]["recommendations"].append("Tambahkan pupuk fosfat (TSP/SP-36)")
+                            elif param_key == "k_content":
+                                analysis[category]["recommendations"].append("Gunakan pupuk kalium (KCl/abu sekam)")
+                            elif param_key == "ph_level":
+                                analysis[category]["recommendations"].append("Lakukan pengapuran dengan dolomit/kapur pertanian")
+                            elif param_key == "rainfall":
+                                analysis[category]["recommendations"].append("Tingkatkan irigasi atau gunakan mulsa untuk konservasi air")
+                            elif param_key == "humidity":
+                                analysis[category]["recommendations"].append("Perbaiki sirkulasi udara dan drainase")
+                                
+                        elif value > max_opt:
+                            analysis[category]["status"] = "suboptimal"
+                            analysis[category]["issues"].append(f"{param_info['name']} terlalu tinggi ({value} {param_info['unit']}, optimal: {min_opt}-{max_opt} {param_info['unit']})")
+                            
+                            # Add specific recommendations
+                            if param_key == "ph_level":
+                                analysis[category]["recommendations"].append("Tambahkan bahan organik (kompos) untuk menurunkan pH")
+                            elif param_key == "rainfall":
+                                analysis[category]["recommendations"].append("Perbaiki sistem drainase untuk mencegah genangan")
+                            elif param_key == "humidity":
+                                analysis[category]["recommendations"].append("Tingkatkan ventilasi dan kurangi irigasi berlebihan")
+    
+    return analysis
+
+def format_parameter_summary(parameters):
+    """Format parameter summary for AI prompt"""
+    summary = "\n**Data Parameter Lapangan:**\n"
+    
+    for category, params in parameters.items():
+        category_name = {
+            "edaphic": "Faktor Edafik (Tanah)",
+            "hydrologic": "Faktor Hidrologik (Air)", 
+            "atmospheric": "Faktor Atmosferik (Iklim)"
+        }.get(category, category)
+        
+        summary += f"\n*{category_name}:*\n"
+        
+        for param_key, value in params.items():
+            if category in AGRICULTURAL_PARAMETERS and param_key in AGRICULTURAL_PARAMETERS[category]:
+                param_info = AGRICULTURAL_PARAMETERS[category][param_key]
+                summary += f"- {param_info['name']}: {value} {param_info['unit']}\n"
+    
+    return summary
 
 def main():
     st.set_page_config(
@@ -280,6 +562,72 @@ def main():
         if selected_location != st.session_state.location:
             st.session_state.location = selected_location
         
+        # Parameter Input
+        st.markdown("### 📊 Parameter Lapangan")
+        st.markdown("*Input data lapangan untuk analisis yang lebih akurat*")
+        
+        # Initialize parameter session state
+        if 'use_parameters' not in st.session_state:
+            st.session_state.use_parameters = False
+        if 'parameters' not in st.session_state:
+            st.session_state.parameters = {"edaphic": {}, "hydrologic": {}, "atmospheric": {}}
+        if 'crop_type' not in st.session_state:
+            st.session_state.crop_type = "general"
+        
+        use_parameters = st.checkbox("Gunakan Data Parameter", value=st.session_state.use_parameters)
+        st.session_state.use_parameters = use_parameters
+        
+        if use_parameters:
+            # Crop type selection for optimal ranges
+            crop_type = st.selectbox(
+                "Jenis Tanaman:",
+                ["general", "padi", "jagung", "cabai"],
+                index=["general", "padi", "jagung", "cabai"].index(st.session_state.crop_type)
+            )
+            st.session_state.crop_type = crop_type
+            
+            # Parameter input tabs
+            param_tab1, param_tab2, param_tab3 = st.tabs(["🌱 Edafik", "💧 Hidrologik", "🌤️ Atmosferik"])
+            
+            with param_tab1:
+                st.markdown("**Faktor Tanah**")
+                for param_key, param_info in AGRICULTURAL_PARAMETERS["edaphic"].items():
+                    value = st.number_input(
+                        f"{param_info['name']} ({param_info['unit']})",
+                        min_value=param_info['min_val'],
+                        max_value=param_info['max_val'],
+                        value=st.session_state.parameters["edaphic"].get(param_key, param_info['default']),
+                        help=param_info['description'],
+                        key=f"edaphic_{param_key}"
+                    )
+                    st.session_state.parameters["edaphic"][param_key] = value
+            
+            with param_tab2:
+                st.markdown("**Faktor Air**")
+                for param_key, param_info in AGRICULTURAL_PARAMETERS["hydrologic"].items():
+                    value = st.number_input(
+                        f"{param_info['name']} ({param_info['unit']})",
+                        min_value=param_info['min_val'],
+                        max_value=param_info['max_val'],
+                        value=st.session_state.parameters["hydrologic"].get(param_key, param_info['default']),
+                        help=param_info['description'],
+                        key=f"hydrologic_{param_key}"
+                    )
+                    st.session_state.parameters["hydrologic"][param_key] = value
+            
+            with param_tab3:
+                st.markdown("**Faktor Iklim**")
+                for param_key, param_info in AGRICULTURAL_PARAMETERS["atmospheric"].items():
+                    value = st.number_input(
+                        f"{param_info['name']} ({param_info['unit']})",
+                        min_value=param_info['min_val'],
+                        max_value=param_info['max_val'],
+                        value=st.session_state.parameters["atmospheric"].get(param_key, param_info['default']),
+                        help=param_info['description'],
+                        key=f"atmospheric_{param_key}"
+                    )
+                    st.session_state.parameters["atmospheric"][param_key] = value
+        
         st.markdown("### Pencarian Pengetahuan")
         search_query = st.text_input("Cari topik pertanian:")
         if search_query:
@@ -313,7 +661,18 @@ def main():
                     "content": topic,
                     "timestamp": datetime.now()
                 })
-                response = get_ai_response(client, st.session_state.user_role, topic, st.session_state.location)
+                # Use parameters if enabled
+                parameters = st.session_state.parameters if st.session_state.use_parameters else None
+                crop_type = st.session_state.crop_type if st.session_state.use_parameters else "general"
+                
+                response = get_ai_response(
+                    client, 
+                    st.session_state.user_role, 
+                    topic, 
+                    st.session_state.location,
+                    parameters,
+                    crop_type
+                )
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": response,
@@ -342,7 +701,18 @@ def main():
                     "content": question,
                     "timestamp": datetime.now()
                 })
-                response = get_ai_response(client, st.session_state.user_role, question, st.session_state.location)
+                # Use parameters if enabled
+                parameters = st.session_state.parameters if st.session_state.use_parameters else None
+                crop_type = st.session_state.crop_type if st.session_state.use_parameters else "general"
+                
+                response = get_ai_response(
+                    client, 
+                    st.session_state.user_role, 
+                    question, 
+                    st.session_state.location,
+                    parameters,
+                    crop_type
+                )
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": response,
@@ -355,6 +725,26 @@ def main():
     st.markdown(f"**Peran Saat Ini:** {st.session_state.user_role}")
     if st.session_state.location:
         st.markdown(f"**Lokasi:** {st.session_state.location}")
+    
+    # Parameter status display
+    if st.session_state.use_parameters:
+        st.markdown(f"**📊 Parameter Analysis:** Aktif (Tanaman: {st.session_state.crop_type.title()})")
+        
+        # Show parameter analysis summary
+        parameter_analysis = analyze_parameters(st.session_state.parameters, st.session_state.crop_type)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            status_color = "🟢" if parameter_analysis["edaphic"]["status"] == "optimal" else "🟡"
+            st.markdown(f"{status_color} **Edafik:** {parameter_analysis['edaphic']['status'].title()}")
+        with col2:
+            status_color = "🟢" if parameter_analysis["hydrologic"]["status"] == "optimal" else "🟡"
+            st.markdown(f"{status_color} **Hidrologik:** {parameter_analysis['hydrologic']['status'].title()}")
+        with col3:
+            status_color = "🟢" if parameter_analysis["atmospheric"]["status"] == "optimal" else "🟡"
+            st.markdown(f"{status_color} **Atmosferik:** {parameter_analysis['atmospheric']['status'].title()}")
+    else:
+        st.markdown("**📊 Parameter Analysis:** Tidak aktif (Gunakan analisis umum)")
     
     # Information about structured responses
     with st.expander("ℹ️ Cara Kerja Chatbot Ini", expanded=False):
@@ -369,6 +759,8 @@ def main():
         - **Edafik** (kesehatan tanah, kesuburan, pH, jenis tanah Indonesia)
         - **Hidrologik** (irigasi, drainase, kualitas air, sistem monsun)  
         - **Atmosferik** (iklim tropis, pola cuaca, adaptasi musiman)
+        
+        **📊 Parameter Input:** Aktifkan input parameter untuk mendapatkan analisis yang lebih spesifik berdasarkan kondisi lapangan aktual Anda.
         
         **Khusus untuk kondisi pertanian Indonesia** dengan pengetahuan tentang tanaman lokal, teknik pertanian tradisional, dan iklim tropis.
         """)
@@ -401,7 +793,18 @@ def main():
         # Get and display AI response
         with st.chat_message("assistant"):
             with st.spinner("Berpikir..."):
-                response = get_ai_response(client, st.session_state.user_role, prompt, st.session_state.location)
+                # Use parameters if enabled
+                parameters = st.session_state.parameters if st.session_state.use_parameters else None
+                crop_type = st.session_state.crop_type if st.session_state.use_parameters else "general"
+                
+                response = get_ai_response(
+                    client, 
+                    st.session_state.user_role, 
+                    prompt, 
+                    st.session_state.location,
+                    parameters,
+                    crop_type
+                )
             st.write(response)
             response_time = datetime.now()
             st.caption(f"_{response_time.strftime('%Y-%m-%d %H:%M:%S')}_")

@@ -13,10 +13,17 @@ Asisten Pertanian Indonesia adalah chatbot cerdas yang dirancang khusus untuk me
 - **Sistem Irigasi**: Teknis, tadah hujan, pasang surut, tetes
 - **Iklim Tropis**: Adaptasi musim hujan dan kemarau
 
-### 🔬 Format Respons 3-Bagian
-1. **Forecasting Recovery**: Prakiraan pemulihan dengan timeline spesifik
-2. **LLM Suggestion**: Wawasan AI berbasis penalaran ilmiah
+### 🔬 Format Respons 3-Bagian dengan Parameter
+1. **Forecasting Recovery**: Prakiraan pemulihan dengan timeline spesifik berdasarkan kondisi lapangan
+2. **LLM Suggestion**: Wawasan AI berbasis penalaran ilmiah dengan data parameter
 3. **Problem-Solving**: Rekomendasi berdasarkan faktor edafik, hidrologik, atmosferik
+
+### 📊 **Input Parameter Lapangan Baru**
+- **20+ Parameter Terukur**: Dari kondisi tanah, air, hingga iklim
+- **Analisis Otomatis**: Status optimal/suboptimal untuk setiap parameter
+- **Rekomendasi Spesifik**: Saran perbaikan berdasarkan data aktual
+- **Referensi Tanaman**: Nilai optimal untuk padi, jagung, cabai
+- **Interface Intuitif**: Input dengan tabs terorganisir
 
 ### 👥 6 Peran Profesional
 - **Petani**: Pengelolaan tanaman dan lahan
@@ -129,3 +136,61 @@ Untuk pertanyaan teknis atau saran pengembangan, silakan buka issue di repositor
 ---
 
 **Dibuat dengan ❤️ untuk kemajuan pertanian Indonesia** 🇮🇩
+
+## Parameter Input System
+
+### 📊 Komprehensif Parameter Coverage
+
+#### 🌱 Edafik (Tanah) - 7 Parameter
+- **NPK Content**: Nitrogen, Phosphorus, Potassium (%)
+- **pH Level**: Keasaman tanah (3.0-9.0)
+- **Organic Matter**: Bahan organik (%)
+- **Soil Temperature**: Suhu tanah 10cm (°C)
+- **Soil Density**: Bulk density (g/cm³)
+
+#### 💧 Hidrologik (Air) - 5 Parameter  
+- **Rainfall**: Curah hujan bulanan (mm)
+- **Water Table**: Kedalaman air tanah (cm)
+- **Drainage Rate**: Laju drainase (cm/jam)
+- **Irrigation Frequency**: Frekuensi irigasi (hari)
+- **Water EC**: Electrical conductivity (dS/m)
+
+#### 🌤️ Atmosferik (Iklim) - 7 Parameter
+- **Air Temperature**: Suhu udara (°C)
+- **Humidity**: Kelembaban relatif (%)
+- **Wind Speed**: Kecepatan angin (km/jam)
+- **Solar Radiation**: Radiasi matahari (MJ/m²/hari)
+- **Photoperiod**: Lama penyinaran (jam)
+- **Atmospheric Pressure**: Tekanan udara (hPa)
+- **CO₂ Concentration**: Konsentrasi CO₂ (ppm)
+
+### 🎯 Intelligent Analysis
+
+#### Crop-Specific Optimization
+```python
+optimal_ranges = {
+    "padi": {"N": (0.15, 0.25), "pH": (5.5, 6.5)},
+    "jagung": {"N": (0.12, 0.20), "pH": (6.0, 7.0)},
+    "cabai": {"N": (0.20, 0.30), "pH": (6.0, 6.8)}
+}
+```
+
+#### Automated Assessment
+- **Status Classification**: Optimal vs Suboptimal
+- **Issue Detection**: Parameter values outside optimal range
+- **Specific Recommendations**: Targeted solutions for each parameter
+- **Visual Indicators**: Color-coded status display
+
+### 🔧 Implementation Features
+
+#### Real-time Analysis
+- Parameter validation and range checking
+- Immediate feedback on parameter status
+- Integration with AI response system
+- Context-aware recommendations
+
+#### User Experience
+- **Tabbed Interface**: Organized parameter input
+- **Crop Selection**: Optimized ranges per crop type
+- **Visual Status**: Green/yellow indicators
+- **Help Text**: Descriptions for each parameter

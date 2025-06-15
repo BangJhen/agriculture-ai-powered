@@ -5,6 +5,11 @@ Chatbot khusus yang dirancang untuk profesional pertanian Indonesia, dibangun de
 ## Fitur
 
 - **Respons khusus peran** untuk berbagai profesional pertanian Indonesia
+- **Input parameter lapangan** untuk analisis yang lebih akurat dan spesifik:
+  - **Parameter Edafik**: N, P, K, pH, bahan organik, suhu tanah, kepadatan tanah
+  - **Parameter Hidrologik**: Curah hujan, kedalaman air tanah, drainase, irigasi, kualitas air
+  - **Parameter Atmosferik**: Suhu udara, kelembaban, kecepatan angin, radiasi matahari, tekanan udara, CO₂
+- **Analisis parameter otomatis** dengan status optimal/suboptimal dan rekomendasi spesifik
 - **Analisis ahli terstruktur** dengan tiga bagian utama:
   - 🔮 **Forecasting Recovery**: Prediksi timeline pemulihan dan langkah remediasi
   - 🤖 **LLM Suggestion**: Wawasan berbasis data menggunakan penalaran ilmiah
@@ -53,6 +58,39 @@ Chatbot khusus yang dirancang untuk profesional pertanian Indonesia, dibangun de
    - Bisnis dan pasar pertanian Indonesia
    - Teknologi dan peralatan pertanian
    - Praktik pertanian berkelanjutan
+
+5. **Gunakan Input Parameter** untuk analisis yang lebih akurat:
+   - Aktifkan "Gunakan Data Parameter" di sidebar
+   - Pilih jenis tanaman untuk referensi optimal
+   - Input data edafik, hidrologik, dan atmosferik
+   - Dapatkan analisis parameter otomatis dan rekomendasi spesifik
+
+## Input Parameter Lapangan
+
+### 🌱 Parameter Edafik (Tanah)
+- **Nitrogen (N)**: Kandungan nitrogen dalam tanah (%)
+- **Phosphorus (P)**: Kandungan fosfor dalam tanah (%)  
+- **Potassium (K)**: Kandungan kalium dalam tanah (%)
+- **pH Tanah**: Tingkat keasaman tanah (3.0-9.0)
+- **Bahan Organik**: Kandungan bahan organik (%)
+- **Suhu Tanah**: Suhu tanah pada kedalaman 10cm (°C)
+- **Kepadatan Tanah**: Bulk density tanah (g/cm³)
+
+### 💧 Parameter Hidrologik (Air)
+- **Curah Hujan**: Curah hujan bulanan (mm/bulan)
+- **Kedalaman Air Tanah**: Kedalaman muka air tanah (cm)
+- **Laju Drainase**: Kecepatan drainase air (cm/jam)
+- **Frekuensi Irigasi**: Interval pemberian air (hari)
+- **EC Air**: Electrical Conductivity air irigasi (dS/m)
+
+### 🌤️ Parameter Atmosferik (Iklim)
+- **Suhu Udara**: Suhu udara rata-rata harian (°C)
+- **Kelembaban Relatif**: Kelembaban udara relatif (%)
+- **Kecepatan Angin**: Kecepatan angin rata-rata (km/jam)
+- **Radiasi Matahari**: Intensitas radiasi matahari (MJ/m²/hari)
+- **Lama Penyinaran**: Durasi sinar matahari per hari (jam)
+- **Tekanan Udara**: Tekanan atmosfer (hPa)
+- **Konsentrasi CO₂**: Konsentrasi karbon dioksida (ppm)
 
 ## Format Respons Terstruktur
 
