@@ -8,7 +8,6 @@ This project follows a clean, organized structure to make development easier:
 
 - **Root Level**: Main application files and configuration
 - **`docs/`**: All documentation (user guides, technical docs)
-- **`tests/`**: Test files and verification scripts
 - **`scripts/`**: Utility scripts for running and deploying
 - **`logs/`**: Runtime logs (auto-generated)
 - **`assets/`**: Images, screenshots, and media files
@@ -21,46 +20,30 @@ This project follows a clean, organized structure to make development easier:
    pip install -r requirements.txt
    ```
 
-2. **Run Tests Before Changes**
+2. **Verify Setup Works**
    ```bash
-   python tests/test_chatbot.py
+   ./launch.sh
    ```
 
 3. **Make Your Changes**
    - Main logic: `agricultural_chatbot.py`
-   - Tests: Add to `tests/`
    - Documentation: Update in `docs/`
 
-4. **Test Your Changes**
+4. **Verify Your Changes**
    ```bash
-   python tests/test_chatbot.py
-   python tests/verify_fix.py
+   ./launch.sh  # Test the application
    ```
 
 5. **Update Documentation**
    - Update `docs/README.md` for user-facing changes
    - Update `docs/DOKUMENTASI_INDONESIA.md` for technical changes
 
-### 🧪 Testing Guidelines
-
-- **`test_chatbot.py`**: Comprehensive functionality tests
-- **`test_indonesia.py`**: Indonesian-specific features
-- **`verify_fix.py`**: Bug fix verification
-
-Always run tests before committing:
-```bash
-# Quick test
-python tests/test_chatbot.py
-
-# Full test suite
-python tests/test_chatbot.py && python tests/test_indonesia.py
-```
-
 ### 📝 Code Organization Rules
 
 1. **Keep it Clean**: No temporary files in root directory
 2. **Categorize**: Put files in appropriate subdirectories
 3. **Document**: Update docs when adding features
+4. **Verify**: Test functionality through the Streamlit GUI
 4. **Test**: Add tests for new functionality
 
 ### 🚀 Deployment
@@ -85,13 +68,11 @@ Use the launch scripts:
 - **`agricultural_chatbot.py`**: Main application
 - **`requirements.txt`**: Dependencies
 - **`docs/README.md`**: User documentation
-- **`tests/test_chatbot.py`**: Main test suite
 
 ### 🎯 Adding New Features
 
 1. Add the feature to `agricultural_chatbot.py`
-2. Create tests in `tests/`
-3. Update documentation in `docs/`
-4. Test thoroughly before committing
+2. Update documentation in `docs/`
+3. Test thoroughly through the Streamlit GUI before committing
 
 This organization makes the project much easier to navigate and maintain! 🌾

@@ -36,14 +36,13 @@ cp .env.example .env
 
 ```
 📦 indonesian-agricultural-chatbot
-├── � agricultural_chatbot.py     # Main application
+├── 🔥 agricultural_chatbot.py     # Main application
 ├── 📄 requirements.txt            # Dependencies
-├── � launch.sh                   # Quick launcher
-├── � .env.example               # API key template
+├── 🔧 launch.sh                   # Quick launcher
+├── 📋 .env.example               # API key template
 │
-├── � docs/                      # User guides
-├── 🧪 tests/                     # Test suite
-├── � scripts/                   # Utility scripts
+├── 📚 docs/                      # User guides
+├── 🔧 scripts/                   # Utility scripts
 └── 📖 Additional guides...       # Setup & development docs
 ```
 
@@ -56,16 +55,6 @@ This app requires an OpenRouter API key. The launch script will guide you throug
 3. Add your key to the `.env` file
 
 **Need help?** See [API_SETUP.md](API_SETUP.md) for detailed instructions.
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-python tests/test_chatbot.py
-
-# Indonesian-specific features
-python tests/test_indonesia.py
-```
 
 ## 📖 Documentation
 
@@ -96,7 +85,7 @@ git clone <your-fork>
 cd prototype-model
 pip install -r requirements.txt
 cp .env.example .env  # Add your API key
-python tests/test_chatbot.py  # Verify everything works
+./launch.sh  # Test the application
 ```
 
 **New to the project?** See [CONTRIBUTING.md](CONTRIBUTING.md) for a quick start guide.

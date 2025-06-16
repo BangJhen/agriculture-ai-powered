@@ -14,8 +14,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Add your OpenRouter API key to .env
 
-# 3. Test everything works
-python tests/test_chatbot.py
+# 3. Verify everything works
 ./launch.sh
 ```
 
@@ -24,7 +23,7 @@ python tests/test_chatbot.py
 - [ ] Read the [README.md](README.md) for project overview
 - [ ] Setup your API key using [API_SETUP.md](API_SETUP.md)
 - [ ] Check [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for detailed workflow
-- [ ] Run tests to ensure everything works
+- [ ] Launch the app to ensure everything works
 
 ## 🛠️ Making Changes
 
@@ -35,18 +34,11 @@ git checkout -b feature/your-feature-name
 
 ### 2. Make Your Changes
 - Edit code in `agricultural_chatbot.py`
-- Add tests in `tests/`
 - Update docs if needed
 
 ### 3. Test Your Changes
 ```bash
-# Test functionality
-python tests/test_chatbot.py
-
-# Test Indonesian features
-python tests/test_indonesia.py
-
-# Test the app
+# Test the app functionality
 ./launch.sh
 ```
 
@@ -67,18 +59,17 @@ git push origin feature/your-feature-name
 | File | Purpose |
 |------|---------|
 | `agricultural_chatbot.py` | Main application code |
-| `tests/test_chatbot.py` | Main test suite |
 | `requirements.txt` | Python dependencies |
 | `.env.example` | API key template |
 | `docs/` | User documentation |
 
-## 🧪 Testing Guidelines
+## 🧪 Verification Guidelines
 
-Always test before submitting:
-- [ ] `python tests/test_chatbot.py` passes
-- [ ] App starts without errors
-- [ ] Your feature works as expected
+Always verify before submitting:
+- [ ] App starts without errors (`./launch.sh`)
+- [ ] Your feature works as expected in the GUI
 - [ ] Existing features still work
+- [ ] No console errors during use
 
 ## 📝 Documentation
 
