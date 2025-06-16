@@ -102,20 +102,3 @@ python tests/test_chatbot.py  # Verify everything works
 **New to the project?** See [CONTRIBUTING.md](CONTRIBUTING.md) for a quick start guide.
 
 **Detailed workflow?** Check [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for comprehensive instructions.
-
-## 📄 License
-
-Developed for sustainable agriculture education and consultation in Indonesia.
-
----
-
-<div align="center">
-
-**🌾 Made with ❤️ for Indonesian Sustainable Agriculture 🌾**
-
-[![GitHub stars](https://img.shields.io/github/stars/yourusername/indonesian-agricultural-chatbot?style=social)](https://github.com/yourusername/indonesian-agricultural-chatbot)
-
-**Questions?** Check our documentation above • **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-</div>
-
