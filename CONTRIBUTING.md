@@ -93,7 +93,7 @@ If you add new features:
 - **General questions**: Open an issue
 - **Setup problems**: Check [API_SETUP.md](API_SETUP.md)
 - **Development questions**: See [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
-- **All docs**: [DOCS_INDEX.md](DOCS_INDEX.md)
+- **User documentation**: See [docs/README.md](docs/README.md)
 
 ## 🎯 What We're Looking For
 

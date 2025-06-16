@@ -67,9 +67,7 @@ python tests/test_chatbot.py
 python tests/test_indonesia.py
 ```
 
-## 📖 Additional Documentation
-
-**Looking for something specific?** Check our [📚 Documentation Index](DOCS_INDEX.md) for a complete guide to all available documentation.
+## 📖 Documentation
 
 | Guide | Description |
 |-------|-------------|
@@ -78,7 +76,6 @@ python tests/test_indonesia.py
 | [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) | Development workflow and best practices |
 | [docs/README.md](docs/README.md) | Detailed user documentation |
 | [docs/DOKUMENTASI_INDONESIA.md](docs/DOKUMENTASI_INDONESIA.md) | Technical docs (Indonesian) |
-| [DOCS_INDEX.md](DOCS_INDEX.md) | **📚 Complete documentation index** |
 
 ## 🌍 Indonesian Agriculture Focus
 
@@ -105,4 +102,20 @@ python tests/test_chatbot.py  # Verify everything works
 **New to the project?** See [CONTRIBUTING.md](CONTRIBUTING.md) for a quick start guide.
 
 **Detailed workflow?** Check [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for comprehensive instructions.
+
+## 📄 License
+
+Developed for sustainable agriculture education and consultation in Indonesia.
+
+---
+
+<div align="center">
+
+**🌾 Made with ❤️ for Indonesian Sustainable Agriculture 🌾**
+
+[![GitHub stars](https://img.shields.io/github/stars/yourusername/indonesian-agricultural-chatbot?style=social)](https://github.com/yourusername/indonesian-agricultural-chatbot)
+
+**Questions?** Check our documentation above • **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+</div>
 
