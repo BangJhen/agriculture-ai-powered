@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
+# Import West Java crop analysis functionality
+from west_java_crop_analysis import WestJavaCropAnalyzer, generate_comprehensive_report, get_traditional_practices_and_risks
 
 # Load environment variables from .env file
 load_dotenv()
@@ -637,6 +639,305 @@ def format_parameter_summary(parameters):
     
     return summary
 
+def display_crop_analysis_dashboard():
+    """Display comprehensive crop analysis dashboard"""
+    st.markdown("## 🗺️ Dashboard Analisis Kesesuaian Tanaman Jawa Barat")
+    
+    try:
+        analyzer = st.session_state.crop_analyzer
+        
+        # Generate analysis for both crops
+        corn_results = analyzer.analyze_all_regions("corn")
+        cassava_results = analyzer.analyze_all_regions("cassava")
+        
+        # Summary statistics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("📊 Total Wilayah", len(analyzer.west_java_regions))
+        
+        with col2:
+            corn_suitable = len([r for r in corn_results if r["overall_score"] >= 0.6])
+            st.metric("🌽 Wilayah Cocok Jagung", corn_suitable)
+        
+        with col3:
+            cassava_suitable = len([r for r in cassava_results if r["overall_score"] >= 0.6])
+            st.metric("🥔 Wilayah Cocok Singkong", cassava_suitable)
+        
+        with col4:
+            both_suitable = len([r for r in corn_results if r["overall_score"] >= 0.6 and 
+                               any(c["region"] == r["region"] and c["overall_score"] >= 0.6 for c in cassava_results)])
+            st.metric("🌟 Cocok Keduanya", both_suitable)
+        
+        # Top regions for each crop
+        st.markdown("### 🏆 Wilayah Terbaik")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🌽 Top 5 Wilayah untuk Jagung")
+            for i, result in enumerate(corn_results[:5]):
+                score_color = "🟢" if result["overall_score"] >= 0.8 else "🟡" if result["overall_score"] >= 0.6 else "🟠"
+                st.markdown(f"{i+1}. {score_color} **{result['region']}** - {result['overall_score']:.3f} ({result['suitability_class']})")
+        
+        with col2:
+            st.markdown("#### 🥔 Top 5 Wilayah untuk Singkong")
+            for i, result in enumerate(cassava_results[:5]):
+                score_color = "🟢" if result["overall_score"] >= 0.8 else "🟡" if result["overall_score"] >= 0.6 else "🟠"
+                st.markdown(f"{i+1}. {score_color} **{result['region']}** - {result['overall_score']:.3f} ({result['suitability_class']})")
+        
+        # Detailed comparison table
+        st.markdown("### 📋 Tabel Perbandingan Lengkap")
+        
+        # Create comparison dataframe
+        import pandas as pd
+        comparison_data = []
+        
+        for corn_result in corn_results:
+            cassava_result = next((c for c in cassava_results if c["region"] == corn_result["region"]), None)
+            if cassava_result:
+                comparison_data.append({
+                    "Wilayah": corn_result["region"],
+                    "Skor Jagung": corn_result["overall_score"],
+                    "Kelas Jagung": corn_result["suitability_class"],
+                    "Skor Singkong": cassava_result["overall_score"],
+                    "Kelas Singkong": cassava_result["suitability_class"],
+                    "Ketinggian": corn_result["region_characteristics"]["altitude"],
+                    "Curah Hujan": corn_result["region_characteristics"]["annual_rainfall"],
+                    "Jenis Tanah": corn_result["region_characteristics"]["soil_type"]
+                })
+        
+        df = pd.DataFrame(comparison_data)
+        st.dataframe(df, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error dalam analisis: {str(e)}")
+
+def display_single_crop_analysis(crop_type, selected_region):
+    """Display analysis for a single crop"""
+    st.markdown(f"## {'🌽 Analisis Kesesuaian Jagung' if crop_type == 'corn' else '🥔 Analisis Kesesuaian Singkong'}")
+    
+    try:
+        analyzer = st.session_state.crop_analyzer
+        
+        if selected_region == "Semua Wilayah":
+            # Show all regions analysis
+            results = analyzer.analyze_all_regions(crop_type)
+            
+            # Display crop requirements
+            crop_summary = analyzer.get_crop_summary(crop_type)
+            
+            with st.expander("📋 Persyaratan Tumbuh", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**🌱 Faktor Edafik (Tanah)**")
+                    req = crop_summary["requirements_summary"]["edaphic"]
+                    st.markdown(f"• pH: {req['ph_range']}")
+                    st.markdown(f"• Bahan Organik: {req['organic_matter']}")
+                    st.markdown(f"• Drainase: {req['drainage']}")
+                    st.markdown(f"• Jenis Tanah: {', '.join(req['soil_types'])}")
+                
+                with col2:
+                    st.markdown("**💧 Faktor Hidrologik (Air)**")
+                    req = crop_summary["requirements_summary"]["hydrologic"]
+                    st.markdown(f"• Curah Hujan: {req['annual_rainfall']}")
+                    st.markdown(f"• Kedalaman Air Tanah: {req['water_table']}")
+                    st.markdown(f"• Toleransi Kekeringan: {req['drought_tolerance']}")
+                
+                with col3:
+                    st.markdown("**🌤️ Faktor Atmosferik (Iklim)**")
+                    req = crop_summary["requirements_summary"]["atmospheric"]
+                    st.markdown(f"• Suhu: {req['temperature']}")
+                    st.markdown(f"• Suhu Optimal: {req['optimal_temperature']}")
+                    st.markdown(f"• Kelembaban: {req['humidity']}")
+                    st.markdown(f"• Ketinggian: {req['altitude']}")
+            
+            # Display results
+            st.markdown("### 🎯 Hasil Analisis Kesesuaian")
+            
+            for result in results:
+                score_color = "🟢" if result["overall_score"] >= 0.8 else "🟡" if result["overall_score"] >= 0.6 else "🟠" if result["overall_score"] >= 0.4 else "🔴"
+                
+                with st.expander(f"{score_color} {result['region']} - {result['suitability_class']} ({result['overall_score']:.3f})"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**📊 Skor Kategori:**")
+                        st.markdown(f"• Edafik: {result['category_scores']['edaphic']:.3f}")
+                        st.markdown(f"• Hidrologik: {result['category_scores']['hydrologic']:.3f}")
+                        st.markdown(f"• Atmosferik: {result['category_scores']['atmospheric']:.3f}")
+                    
+                    with col2:
+                        st.markdown("**🌍 Karakteristik Wilayah:**")
+                        char = result["region_characteristics"]
+                        st.markdown(f"• Ketinggian: {char['altitude']} m")
+                        st.markdown(f"• Curah Hujan: {char['annual_rainfall']} mm/tahun")
+                        st.markdown(f"• Suhu: {char['temperature_range'][0]}-{char['temperature_range'][1]}°C")
+                        st.markdown(f"• Jenis Tanah: {char['soil_type']}")
+        
+        else:
+            # Show specific region analysis
+            result = analyzer.evaluate_regional_suitability(crop_type, selected_region)
+            
+            # Display result with detailed breakdown
+            score_color = "🟢" if result["overall_score"] >= 0.8 else "🟡" if result["overall_score"] >= 0.6 else "🟠" if result["overall_score"] >= 0.4 else "🔴"
+            
+            st.markdown(f"### {score_color} {result['region']} - {result['suitability_class']}")
+            st.markdown(f"**Skor Keseluruhan: {result['overall_score']:.3f}**")
+            
+            # Progress bars for category scores
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown("**🌱 Edafik**")
+                st.progress(result['category_scores']['edaphic'])
+                st.markdown(f"{result['category_scores']['edaphic']:.3f}")
+            
+            with col2:
+                st.markdown("**💧 Hidrologik**")
+                st.progress(result['category_scores']['hydrologic'])
+                st.markdown(f"{result['category_scores']['hydrologic']:.3f}")
+            
+            with col3:
+                st.markdown("**🌤️ Atmosferik**")
+                st.progress(result['category_scores']['atmospheric'])
+                st.markdown(f"{result['category_scores']['atmospheric']:.3f}")
+            
+            # Regional characteristics
+            st.markdown("### 🌍 Karakteristik Wilayah")
+            char = result["region_characteristics"]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Koordinat:** {char['coordinates']}")
+                st.markdown(f"**Ketinggian:** {char['altitude']} meter")
+                st.markdown(f"**Zona Iklim:** {char['climate_zone']}")
+                st.markdown(f"**Curah Hujan:** {char['annual_rainfall']} mm/tahun")
+            
+            with col2:
+                st.markdown(f"**Rentang Suhu:** {char['temperature_range'][0]}-{char['temperature_range'][1]}°C")
+                st.markdown(f"**Jenis Tanah:** {char['soil_type']}")
+                st.markdown(f"**Akses Irigasi:** {char['irrigation']}")
+                st.markdown(f"**Risiko Banjir:** {char['flood_risk']}")
+            
+            # Traditional practices and risks
+            practices_risks = get_traditional_practices_and_risks()
+            crop_practices = practices_risks.get(crop_type, {}).get("traditional_practices", {})
+            
+            for practice_type, practice_data in crop_practices.items():
+                if selected_region in practice_data.get("regions", []):
+                    st.markdown(f"### 🌾 Praktik Tradisional ({practice_type.replace('_', ' ').title()})")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Praktik Budidaya:**")
+                        for practice in practice_data.get("practices", []):
+                            st.markdown(f"• {practice}")
+                    
+                    with col2:
+                        st.markdown("**Risiko Hama & Penyakit:**")
+                        for risk in practice_data.get("pest_risks", []):
+                            st.markdown(f"• {risk}")
+                    
+                    st.markdown("**Ancaman Iklim:**")
+                    for threat in practice_data.get("climate_threats", []):
+                        st.markdown(f"• {threat}")
+    
+    except Exception as e:
+        st.error(f"Error dalam analisis: {str(e)}")
+
+def display_crop_comparison():
+    """Display comparison between corn and cassava suitability"""
+    st.markdown("## ⚖️ Perbandingan Kesesuaian Jagung vs Singkong")
+    
+    try:
+        analyzer = st.session_state.crop_analyzer
+        
+        corn_results = analyzer.analyze_all_regions("corn")
+        cassava_results = analyzer.analyze_all_regions("cassava")
+        
+        # Create side-by-side comparison
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 🌽 Jagung (Zea mays)")
+            corn_summary = analyzer.get_crop_summary("corn")
+            
+            st.markdown("**Keunggulan:**")
+            st.markdown("• Produktivitas tinggi di tanah subur")
+            st.markdown("• Pasar yang besar dan stabil")
+            st.markdown("• Teknologi budidaya sudah maju")
+            st.markdown("• Dapat digunakan untuk pakan dan pangan")
+            
+            st.markdown("**Tantangan:**")
+            st.markdown("• Memerlukan input nutrisi tinggi")
+            st.markdown("• Rentan terhadap hama penggerek")
+            st.markdown("• Membutuhkan irigasi yang baik")
+            
+            avg_corn_score = sum(r["overall_score"] for r in corn_results) / len(corn_results)
+            st.metric("Rata-rata Skor Kesesuaian", f"{avg_corn_score:.3f}")
+        
+        with col2:
+            st.markdown("### 🥔 Singkong (Manihot esculenta)")
+            cassava_summary = analyzer.get_crop_summary("cassava")
+            
+            st.markdown("**Keunggulan:**")
+            st.markdown("• Toleran kekeringan tinggi")
+            st.markdown("• Dapat tumbuh di lahan marginal")
+            st.markdown("• Input rendah, pemeliharaan mudah")
+            st.markdown("• Sumber karbohidrat penting")
+            
+            st.markdown("**Tantangan:**")
+            st.markdown("• Harga pasar relatif rendah")
+            st.markdown("• Proses pengolahan lebih kompleks")
+            st.markdown("• Umur panen lebih lama")
+            
+            avg_cassava_score = sum(r["overall_score"] for r in cassava_results) / len(cassava_results)
+            st.metric("Rata-rata Skor Kesesuaian", f"{avg_cassava_score:.3f}")
+        
+        # Regional comparison chart
+        st.markdown("### 📊 Perbandingan per Wilayah")
+        
+        import pandas as pd
+        
+        comparison_data = []
+        for corn_result in corn_results:
+            cassava_result = next((c for c in cassava_results if c["region"] == corn_result["region"]), None)
+            if cassava_result:
+                comparison_data.append({
+                    "region": corn_result["region"],
+                    "corn_score": corn_result["overall_score"],
+                    "cassava_score": cassava_result["overall_score"],
+                    "difference": cassava_result["overall_score"] - corn_result["overall_score"]
+                })
+        
+        df = pd.DataFrame(comparison_data)
+        
+        # Display as bar chart using Streamlit's built-in charting
+        chart_data = df.set_index('region')[['corn_score', 'cassava_score']]
+        chart_data.columns = ['Jagung', 'Singkong']
+        st.bar_chart(chart_data)
+        
+        # Recommendations based on comparison
+        st.markdown("### 💡 Rekomendasi Regional")
+        
+        for data in comparison_data:
+            region = data["region"]
+            corn_score = data["corn_score"]
+            cassava_score = data["cassava_score"]
+            diff = data["difference"]
+            
+            if abs(diff) < 0.1:
+                recommendation = "🟡 Kedua tanaman cocok - pilih berdasarkan aspek ekonomi"
+            elif diff > 0.1:
+                recommendation = "🥔 Singkong lebih cocok untuk wilayah ini"
+            else:
+                recommendation = "🌽 Jagung lebih cocok untuk wilayah ini"
+            
+            st.markdown(f"**{region}**: {recommendation} (Selisih: {diff:+.3f})")
+    
+    except Exception as e:
+        st.error(f"Error dalam perbandingan: {str(e)}")
+
 def main():
     st.set_page_config(
         page_title="Asisten Pertanian Indonesia",
@@ -749,6 +1050,56 @@ def main():
                         key=f"atmospheric_{param_key}"
                     )
                     st.session_state.parameters["atmospheric"][param_key] = value
+        
+        # West Java Crop Suitability Analysis
+        st.markdown("### 🗺️ Analisis Kesesuaian Tanaman Jawa Barat")
+        st.markdown("*Evaluasi potensi tanam jagung dan singkong berdasarkan kondisi edafik, hidrologik, dan atmosferik*")
+        
+        # Initialize West Java analyzer session state
+        if 'show_crop_analysis' not in st.session_state:
+            st.session_state.show_crop_analysis = False
+        if 'crop_analyzer' not in st.session_state:
+            st.session_state.crop_analyzer = WestJavaCropAnalyzer()
+        
+        crop_analysis_tab = st.radio(
+            "Pilih Analisis:",
+            ["📊 Dashboard", "🌽 Jagung", "🥔 Singkong", "📈 Perbandingan"],
+            horizontal=True
+        )
+        
+        if crop_analysis_tab == "📊 Dashboard":
+            if st.button("📋 Lihat Ringkasan Lengkap", key="crop_dashboard"):
+                st.session_state.show_crop_analysis = True
+                st.session_state.crop_analysis_type = "dashboard"
+        
+        elif crop_analysis_tab == "🌽 Jagung":
+            selected_region = st.selectbox(
+                "Pilih Kabupaten/Kota:",
+                ["Semua Wilayah"] + list(st.session_state.crop_analyzer.west_java_regions.keys()),
+                key="corn_region"
+            )
+            
+            if st.button("🔍 Analisis Kesesuaian Jagung", key="analyze_corn"):
+                st.session_state.show_crop_analysis = True
+                st.session_state.crop_analysis_type = "corn"
+                st.session_state.selected_region = selected_region
+        
+        elif crop_analysis_tab == "🥔 Singkong":
+            selected_region = st.selectbox(
+                "Pilih Kabupaten/Kota:",
+                ["Semua Wilayah"] + list(st.session_state.crop_analyzer.west_java_regions.keys()),
+                key="cassava_region"
+            )
+            
+            if st.button("🔍 Analisis Kesesuaian Singkong", key="analyze_cassava"):
+                st.session_state.show_crop_analysis = True
+                st.session_state.crop_analysis_type = "cassava"
+                st.session_state.selected_region = selected_region
+        
+        elif crop_analysis_tab == "📈 Perbandingan":
+            if st.button("⚖️ Bandingkan Kedua Tanaman", key="compare_crops"):
+                st.session_state.show_crop_analysis = True
+                st.session_state.crop_analysis_type = "comparison"
         
         st.markdown("### Pencarian Pengetahuan")
         search_query = st.text_input("Cari topik pertanian:")
@@ -867,6 +1218,26 @@ def main():
             st.markdown(f"{status_color} **Atmosferik:** {parameter_analysis['atmospheric']['status'].title()}")
     else:
         st.markdown("**📊 Parameter Analysis:** Tidak aktif (Gunakan analisis umum)")
+    
+    # Display West Java Crop Analysis if requested
+    if st.session_state.get('show_crop_analysis', False):
+        analysis_type = st.session_state.get('crop_analysis_type', 'dashboard')
+        
+        if analysis_type == "dashboard":
+            display_crop_analysis_dashboard()
+        elif analysis_type == "corn":
+            display_single_crop_analysis("corn", st.session_state.get('selected_region', 'Semua Wilayah'))
+        elif analysis_type == "cassava":
+            display_single_crop_analysis("cassava", st.session_state.get('selected_region', 'Semua Wilayah'))
+        elif analysis_type == "comparison":
+            display_crop_comparison()
+        
+        # Add button to close analysis
+        if st.button("❌ Tutup Analisis Tanaman", key="close_analysis"):
+            st.session_state.show_crop_analysis = False
+            st.rerun()
+        
+        st.markdown("---")
     
     # Information about structured responses
     with st.expander("ℹ️ Cara Kerja Chatbot Ini", expanded=False):
