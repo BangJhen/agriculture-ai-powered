@@ -4,6 +4,11 @@ Test script untuk Asisten Pertanian Indonesia
 Mendemonstrasikan format respons terstruktur khusus Indonesia dengan parameter
 """
 
+import sys
+import os
+# Add parent directory to path to import agricultural_chatbot
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from agricultural_chatbot import initialize_openai_client, get_ai_response, analyze_parameters
 
 def test_indonesian_responses():

@@ -3,6 +3,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+.env.staging
+*.key
+*_key.txt
+
+# Organization-specific ignores
+logs/*.log
+logs/*.txt
+assets/.DS_Store
+*.tmp
+*.temp
+
 # C extensions
 *.so
 

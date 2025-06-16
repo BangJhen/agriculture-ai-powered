@@ -1,7 +1,12 @@
 import streamlit as st
 import json
+import os
 from datetime import datetime
 from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Indonesian Agricultural knowledge base
 INDONESIAN_AGRICULTURAL_KNOWLEDGE = {
@@ -92,87 +97,204 @@ INDONESIAN_PROVINCES = [
 ]
 
 USER_ROLES = {
-    "Petani": "Spesialis pengelolaan tanaman dan lahan pertanian",
-    "Peternak": "Ahli peternakan dan pengembangbiakan hewan", 
-    "Spesialis Agribisnis": "Ahli bisnis dan analisis pasar pertanian",
-    "Insinyur Pertanian": "Spesialis teknologi dan peralatan pertanian",
-    "Petugas Penyuluh Pertanian": "Profesional pendidikan dan penyuluhan pertanian",
-    "Konsultan Pertanian": "Spesialis konsultasi pertanian komprehensif"
+    "Petani Konservasi": "Praktisi pertanian yang memperhatikan keberlanjutan lingkungan dan produktivitas",
+    "Penyuluh Pertanian Lapangan": "Pendamping petani dalam praktik pertanian berkelanjutan dan konservasi", 
+    "Konsultan Pertanian Berkelanjutan": "Ahli sistem pertanian ramah lingkungan dan efisien secara ekonomi",
+    "Agroekolog": "Peneliti hubungan antara pertanian, ekologi, dan masyarakat lokal",
+    "Spesialis Konservasi Tanah & Air": "Ahli intervensi berbasis ekosistem untuk wilayah rawan erosi dan kekeringan",
+    "Fasilitator Agroforestri Komunitas": "Pendamping pengembangan sistem wanatani di daerah rawan deforestasi",
+    "Ahli Iklim Pertanian": "Spesialis mitigasi dan adaptasi dampak perubahan iklim pada pertanian"
+}
+
+# Sustainable agriculture and conservation knowledge base for Indonesia
+SUSTAINABLE_AGRICULTURE_KNOWLEDGE = {
+    "agroecological_methods": {
+        "tumpangsari": {
+            "description": "Sistem tanam campuran untuk meningkatkan keanekaragaman hayati dan efisiensi lahan",
+            "crops": ["padi-ikan", "jagung-kacang", "kelapa-kakao", "kopi-pisang"],
+            "benefits": ["stabilitas hasil", "pengendalian hama alami", "kesuburan tanah", "diversifikasi pendapatan"]
+        },
+        "agroforestry_wanatani": {
+            "description": "Integrasi pohon dengan tanaman pertanian untuk konservasi dan produktivitas",
+            "systems": ["talun", "kebun campuran", "silvopastura", "alley cropping"],
+            "tree_species": ["albasia", "mahoni", "sengon", "petai", "durian", "kemiri"]
+        },
+        "sri_system": {
+            "description": "System of Rice Intensification untuk meningkatkan produktivitas dengan input minimal",
+            "techniques": ["tanam muda", "jarak tanam lebar", "irigasi berselang", "penyiangan mekanis"],
+            "benefits": ["hemat air 50%", "hemat benih 90%", "produktivitas naik 20-50%"]
+        },
+        "bioorganic_inputs": {
+            "pupuk_hayati": ["rhizobium", "mikoriza", "azotobacter", "pseudomonas"],
+            "pestisida_nabati": ["neem", "mimba", "tembakau", "serai wangi", "daun pepaya"],
+            "kompos_organik": ["bokashi", "kascing", "kompos jerami", "pupuk kandang fermentasi"]
+        }
+    },
+    "environmental_conservation": {
+        "soil_conservation": {
+            "terasering": "Pembuatan teras untuk mencegah erosi di lahan miring",
+            "vetiver_grass": "Penanaman rumput vetiver sebagai penguat lereng dan filter sedimen",
+            "cover_crops": "Tanaman penutup tanah seperti legum untuk mencegah erosi",
+            "mulching": "Penutupan permukaan tanah dengan bahan organik"
+        },
+        "water_conservation": {
+            "embung": "Kolam penampungan air hujan untuk irigasi saat kemarau",
+            "drainase_mikro": "Sistem drainase kecil untuk mengatur aliran air",
+            "biopori": "Lubang resapan untuk meningkatkan infiltrasi air",
+            "rain_harvesting": "Penampungan air hujan dari atap dan permukaan"
+        },
+        "biodiversity_protection": {
+            "refuge_areas": "Area perlindungan untuk musuh alami hama",
+            "flower_strips": "Jalur bunga untuk mendukung penyerbuk",
+            "native_species": "Pemanfaatan spesies lokal yang adaptif",
+            "corridor_planting": "Penanaman koridor untuk konektivitas habitat"
+        }
+    },
+    "climate_adaptation": {
+        "drought_management": {
+            "varietas_tahan": ["padi gogo", "jagung hibrida", "ubi jalar ungu"],
+            "water_efficient": ["irigasi tetes", "mulsa plastik", "hidroponik"],
+            "scheduling": "Penyesuaian waktu tanam dengan pola hujan"
+        },
+        "flood_management": {
+            "early_warning": "Sistem peringatan dini banjir",
+            "drainage_systems": "Sistem drainase yang memadai",
+            "flood_resistant": "Varietas tahan genangan air"
+        },
+        "pest_climate_adaptation": {
+            "ipm_approach": "Pengendalian hama terpadu berbasis ekosistem",
+            "beneficial_insects": "Pemanfaatan serangga berguna",
+            "trap_crops": "Tanaman perangkap untuk mengendalikan hama"
+        }
+    },
+    "regional_solutions": {
+        "jawa": {
+            "challenges": ["konversi lahan", "degradasi tanah", "pencemaran air"],
+            "solutions": ["urban farming", "hidroponik vertikal", "bioremediasi"]
+        },
+        "sumatera": {
+            "challenges": ["deforestasi", "kebakaran lahan", "erosi gambut"],
+            "solutions": ["agroforestri karet", "rewetting gambut", "fire prevention"]
+        },
+        "kalimantan": {
+            "challenges": ["alih fungsi lahan", "pencemaran tambang", "banjir"],
+            "solutions": ["agroforestri komunitas", "fitoremediasi", "early warning system"]
+        },
+        "sulawesi": {
+            "challenges": ["erosi lereng", "kekeringan", "salinitas"],
+            "solutions": ["terasering", "konservasi air", "toleran salin"]
+        },
+        "nusa_tenggara": {
+            "challenges": ["kekeringan ekstrem", "tanah marginal", "angin kencang"],
+            "solutions": ["agrosilvikultura", "xerophytic crops", "windbreak planting"]
+        },
+        "papua": {
+            "challenges": ["deforestasi", "erosi tanah", "akses teknologi"],
+            "solutions": ["agroforestri tradisional", "konservasi in-situ", "teknologi tepat guna"]
+        }
+    }
 }
 
 def initialize_openai_client():
-    """Initialize OpenAI client with OpenRouter"""
+    """Initialize OpenAI client with OpenRouter using environment variables"""
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    
+    if not api_key:
+        st.error("🔑 **Error**: OpenRouter API key not found!")
+        st.info("""
+        **Setup Required:**
+        1. Copy `.env.example` to `.env`
+        2. Add your OpenRouter API key to `.env`
+        3. Get your API key from: https://openrouter.ai/keys
+        
+        **Example .env file:**
+        ```
+        OPENROUTER_API_KEY=sk-or-v1-your-actual-api-key-here
+        ```
+        """)
+        st.stop()
+    
     return OpenAI(
         base_url="https://openrouter.ai/api/v1",
-        api_key="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",
+        api_key=api_key
     )
 
 def get_role_specific_prompt(user_role, question, location=""):
-    """Generate Indonesia-specific role prompts with structured format"""
+    """Generate sustainable agriculture role prompts with environmental conservation focus"""
     role_contexts = {
-        "Petani": "Anda adalah konsultan pertanian ahli yang membantu petani Indonesia dengan masalah praktis pengelolaan tanaman dan lahan. Fokus pada saran yang dapat diterapkan untuk budidaya tanaman, kesehatan tanah, pengendalian hama, dan praktik pertanian terbaik.",
+        "Petani Konservasi": "Anda adalah konsultan pertanian berkelanjutan yang membantu petani Indonesia menerapkan praktik agroekologi. Fokus pada metode ramah lingkungan seperti tumpangsari, agroforestri, pupuk hayati, dan konservasi tanah-air.",
         
-        "Peternak": "Anda adalah spesialis peternakan yang membantu peternak Indonesia. Fokus pada kesehatan hewan, nutrisi, praktik breeding, kandang, dan strategi manajemen ternak.",
+        "Penyuluh Pertanian Lapangan": "Anda adalah penyuluh lapangan yang mendampingi petani dalam praktik pertanian berkelanjutan. Fokus pada edukasi konservasi lingkungan, transfer teknologi ramah lingkungan, dan pemberdayaan masyarakat petani.",
         
-        "Spesialis Agribisnis": "Anda adalah konsultan agribisnis yang membantu pengambilan keputusan bisnis pertanian di Indonesia. Fokus pada analisis pasar, rantai pasok, ekonomi pertanian, perencanaan bisnis, dan keuangan pertanian.",
+        "Konsultan Pertanian Berkelanjutan": "Anda adalah ahli sistem pertanian berkelanjutan yang merancang solusi ramah lingkungan dan efisien ekonomi. Fokus pada sistem terintegrasi, analisis keberlanjutan, dan strategi mitigasi risiko lingkungan.",
         
-        "Insinyur Pertanian": "Anda adalah ahli teknik pertanian yang membantu dengan teknologi dan peralatan pertanian di Indonesia. Fokus pada sistem irigasi, mesin pertanian, precision agriculture, otomasi, dan infrastruktur pertanian.",
+        "Agroekolog": "Anda adalah peneliti dan praktisi agroekologi yang memahami hubungan kompleks antara pertanian, ekologi, dan masyarakat lokal Indonesia. Fokus pada pendekatan holistik berbasis ekosistem.",
         
-        "Petugas Penyuluh Pertanian": "Anda adalah spesialis penyuluhan pertanian yang membantu pendidikan dan penyuluhan petani di Indonesia. Fokus pada transfer pengetahuan, program pelatihan, pengembangan masyarakat, dan penyebaran praktik pertanian terbaik.",
+        "Spesialis Konservasi Tanah & Air": "Anda adalah ahli konservasi yang bekerja di wilayah rawan erosi, longsor, dan kekeringan. Fokus pada intervensi berbasis ekosistem seperti terasering, embung, dan bioremediasi.",
         
-        "Konsultan Pertanian": "Anda adalah konsultan pertanian komprehensif yang memberikan saran ahli di semua aspek pertanian Indonesia. Fokus pada solusi terintegrasi yang mencakup tanaman, ternak, bisnis, teknologi, dan keberlanjutan."
+        "Fasilitator Agroforestri Komunitas": "Anda adalah pendamping masyarakat dalam pengembangan sistem wanatani di daerah rawan deforestasi. Fokus pada integrasi pohon-tanaman, konservasi biodiversitas, dan ekonomi berkelanjutan.",
+        
+        "Ahli Iklim Pertanian": "Anda adalah spesialis adaptasi dan mitigasi perubahan iklim di sektor pertanian. Fokus pada strategi climate-smart agriculture, early warning system, dan resiliensi ekosistem."
     }
     
-    base_prompt = role_contexts.get(user_role, role_contexts["Konsultan Pertanian"])
+    base_prompt = role_contexts.get(user_role, role_contexts["Konsultan Pertanian Berkelanjutan"])
     
-    # Enhanced structured response format for Indonesia
+    # Enhanced structured response format for sustainable agriculture
     structured_format = f"""
     
-    Anda adalah asisten pertanian cerdas yang dirancang khusus untuk mendukung profesional pertanian di Indonesia.
+    Anda adalah AI asisten untuk mendukung profesional yang bekerja dalam pertanian berkelanjutan dan konservasi lingkungan di Indonesia.
     
-    **Respons Anda HARUS mencakup tepat tiga bagian berikut dalam urutan ini:**
+    **Respons Anda HARUS selalu mencerminkan:**
+    - Metode agroekologi yang relevan untuk iklim dan bentang lahan Indonesia
+    - Risiko lingkungan seperti degradasi lahan, limpasan pestisida, deforestasi, dan kelangkaan air
+    - Solusi ekologi spesifik Indonesia: tumpangsari, agroforestri (wanatani), pupuk hayati, SRI, drainase mikro, sistem lahan basah
+
+    **Respons Anda HARUS mencakup tepat tiga bagian berikut:**
 
     ## 1. 🔮 Forecasting Recovery (Prakiraan Pemulihan)
-    Prediksi pemulihan lingkungan dari kerusakan pertanian (misalnya polusi, degradasi tanah, serangan hama, wabah penyakit):
-    - Estimasi waktu pemulihan yang spesifik (hari, minggu, bulan, musim)
-    - Daftar 3-5 langkah remediasi yang dapat diterapkan
-    - Pertimbangkan kondisi lokal/regional dan faktor musiman Indonesia
-    - Pertimbangkan dampak ekonomi dan biaya pemulihan
+    Estimasi waktu dan upaya yang diperlukan untuk memulihkan keseimbangan pertanian dan ekologi setelah gangguan lingkungan:
+    - Timeline pemulihan spesifik dengan pertimbangan ekosistem lokal
+    - Solusi tradisional dan modern Indonesia (terasering, embung, kompos organik, vetiver grass)
+    - Langkah remediasi berbasis konservasi dan keberlanjutan
+    - Biaya dan sumber daya yang diperlukan untuk pemulihan ekologis
 
-    ## 2. 🤖 LLM Suggestion (Saran Model AI)
-    Berikan saran atau wawasan berbasis model yang relevan dengan masalah pertanian saat ini:
-    - Gunakan penalaran ilmiah dan pola berbasis data
-    - Sertakan contoh dunia nyata atau studi kasus yang relevan dengan Indonesia
-    - Referensikan praktik terbaik dari situasi serupa
-    - Sarankan metrik atau indikator monitoring
+    ## 2. 🤖 LLM-Based Suggestions (Saran Berbasis LLM)
+    Wawasan dan saran dari basis pengetahuan LLM yang disesuaikan dengan konteks lingkungan dan agroklimat Indonesia:
+    - Pendekatan agroekologi yang sesuai dengan kondisi lokal
+    - Contoh praktik terbaik dari daerah dengan kondisi serupa di Indonesia
+    - Integrasi pengetahuan ilmiah dengan kearifan lokal
+    - Strategi jangka panjang untuk keberlanjutan
 
-    ## 3. 🔧 Problem-Solving Recommendations (Rekomendasi Pemecahan Masalah)
-    Analisis dan ajukan solusi berdasarkan tiga faktor kritis berikut:
+    ## 3. 🔧 Sustainable Problem-Solving (Pemecahan Masalah Berkelanjutan)
+    Solusi detail dan dapat ditindaklanjuti berdasarkan:
     
-    **Faktor Edafik (Sistem Tanah):**
-    - Kesehatan tanah, struktur, kesuburan, tingkat pH
-    - Jenis tanah Indonesia (andosol, latosol, regosol, alluvial)
-    - Manajemen nutrisi dan bahan organik
+    **Kesehatan Tanah (Edafik):**
+    - Kekayaan mikroba tanah dan biodiversitas
+    - Pengelolaan bahan organik dan struktur tanah
+    - Pencegahan erosi dengan metode konservasi
+    - Bioremediasi untuk tanah terdegradasi
     
-    **Faktor Hidrologik (Sistem Air):**
-    - Efisiensi dan penjadwalan irigasi (teknis, tadah hujan, pasang surut)
-    - Manajemen drainase dan kualitas air
-    - Strategi konservasi air untuk iklim tropis
+    **Sistem Air (Hidrologik):**
+    - Konservasi air dan pengelolaan DAS (Daerah Aliran Sungai)
+    - Manajemen air berkelanjutan dan efisiensi irigasi
+    - Teknologi hemat air dan rain water harvesting
+    - Pencegahan pencemaran air dari aktivitas pertanian
     
-    **Faktor Atmosferik (Sistem Iklim):**
-    - Strategi adaptasi iklim tropis dan siklus monsun Indonesia
-    - Pertimbangan pola cuaca (musim hujan/kemarau)
-    - Optimalisasi kelembaban, angin, dan curah hujan
+    **Faktor Iklim (Atmosferik):**
+    - Adaptasi terhadap variabilitas iklim dan perubahan cuaca
+    - Persiapan menghadapi intensitas hujan dan musim kering
+    - Strategi mitigasi emisi karbon dari pertanian
+    - Pemanfaatan early warning system untuk cuaca ekstrem
 
     **Konteks:**
     - Peran Pengguna: {user_role}
     - Lokasi: {location if location else "Indonesia"}
-    - Basis Pengetahuan Pertanian Indonesia: Tanaman ({', '.join(INDONESIAN_AGRICULTURAL_KNOWLEDGE['crop_management']['common_crops'])}), Ternak, Manajemen Tanah, Irigasi
+    - Basis Pengetahuan Agroekologi: Tumpangsari, Agroforestri, SRI, Konservasi Tanah-Air, Pupuk Hayati
     - Masalah/Pertanyaan: {question}
     
-    Gunakan bahasa yang ringkas dan profesional yang sesuai untuk seorang {user_role}. Format dengan heading markdown untuk rendering GUI.
-    Fokus pada solusi praktis yang dapat diimplementasikan dengan timeline yang jelas dan hasil yang dapat diukur.
-    Sertakan pertimbangan khusus untuk kondisi iklim tropis Indonesia dan praktik pertanian lokal.
+    Gunakan Bahasa Indonesia dan berikan contoh spesifik regional bila memungkinkan.
+    Sesuaikan nada dan tingkat teknis berdasarkan peran profesional yang dipilih.
+    Fokus pada solusi praktis, berkelanjutan, dan ramah lingkungan dengan timeline yang jelas.
     """
     
     return base_prompt + structured_format
@@ -212,7 +334,7 @@ def get_ai_response(client, user_role, question, location="", parameters=None, c
             prompt += parameter_context
         
         completion = client.chat.completions.create(
-            model="mistralai/mistral-tiny",
+            model=os.getenv('OPENROUTER_MODEL', 'mistralai/mistral-tiny'),
             messages=[
                 {
                     "role": "system",
@@ -527,7 +649,7 @@ def main():
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     if 'user_role' not in st.session_state:
-        st.session_state.user_role = "Petani"
+        st.session_state.user_role = list(USER_ROLES.keys())[0]  # Use first role in the list
     if 'location' not in st.session_state:
         st.session_state.location = ""
     
@@ -542,7 +664,7 @@ def main():
         selected_role = st.selectbox(
             "Pilih peran pertanian Anda:",
             list(USER_ROLES.keys()),
-            index=list(USER_ROLES.keys()).index(st.session_state.user_role)
+            index=list(USER_ROLES.keys()).index(st.session_state.user_role) if st.session_state.user_role in USER_ROLES else 0
         )
         
         if selected_role != st.session_state.user_role:
