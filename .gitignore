@@ -218,12 +218,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # Data files (if you add datasets later)
-*.csv
-*.json
-*.xlsx
-*.xls
-data/
-datasets/
+# *.csv
+# *.json
+# *.xlsx
+# *.xls
+# data/
+# datasets/
 
 # Model files (if you add ML models)
 # *.pkl
