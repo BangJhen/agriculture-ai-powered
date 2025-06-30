@@ -226,12 +226,12 @@ data/
 datasets/
 
 # Model files (if you add ML models)
-*.pkl
-*.joblib
-*.h5
-*.pb
-models/
-checkpoints/
+# *.pkl
+# *.joblib
+# *.h5
+# *.pb
+# models/
+# checkpoints/
 
 # Documentation build
 docs/_build/
