@@ -14,10 +14,11 @@ from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Dict, List, Tuple, Any
-
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 # Load environment variables
 load_dotenv()
-
+client = QdrantClient(host="localhost", port=6333)
 # ==================== ML CROP PREDICTOR CLASS ====================
 
 class AICropPredictor:
@@ -195,6 +196,33 @@ class DecisionSupportSystem:
         
         return self.ai_predictor
     
+    def create_query(self, SC, MLC) :
+        """Create a query for the knowledge base"""
+        prompt = f"Sekarang saya memiliki db knowledge base yang berisi informasi tentang pertanian di Indonesia. Saya ingin mencari informasi terkait dengan pertanian, tanaman, dan lingkungan. Berikut adalah pertanyaan saya:\n\n{SC}\n\nSaya juga ingin mempertimbangkan hasil evaluasi ML berikut:\n\n{MLC}\n\n berikan saya query ke qdrant yang relevan untuk menapatkan informasi yang relevan dalam bahasa inggris."
+        response = self.client.chat.completions.create(
+                model="anthropic/claude-3.5-sonnet",
+                messages=[
+                    {"role": "system", "content": "You are an expert Indonesian agricultural advisor focused on environmental optimization and sustainable farming practices."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+        return response.choices[0].message.content.strip()
+        
+    def query_knowledge_base(self, query_text, top_k=3):
+        # Buat embedding dari query
+        query_vector = self.embedding_model.encode(query_text).tolist()
+        # Query ke Qdrant
+        results = self.qdrant_client.search(
+            collection_name="pdf_knowledge",
+            query_vector=query_vector,
+            limit=top_k
+        )
+        # Ambil hasil payload (teks knowledge)
+        knowledge_chunks = [hit.payload.get("text", "") for hit in results]
+        return knowledge_chunks
+    
     def generate_environmental_advice(self, sensor_data, ml_evaluation=None):
         """Generate AI-powered environmental optimization advice"""
         
@@ -232,13 +260,16 @@ class DecisionSupportSystem:
                 **Evaluasi Tanaman Berbasis ML:**
                 - Hasil: {str(ml_evaluation)}
                 """
-        
+            query_text = self.create_query(ml_context, sensor_context)
+            knowledge_chunks = self.query_knowledge_base(query_text, top_k=3)
+            knowledge_context = "\n\n".join([f"Referensi {i+1}: {chunk}" for i, chunk in enumerate(knowledge_chunks) if chunk])
         prompt = f"""
         You are an AI Indonesian agricultural advisor specializing in environmental optimization and crop decision support.
         
         {sensor_context}
         {ml_context}
-        
+        ### 📚 Referensi Pengetahuan Terkait:
+        {knowledge_context}
         Provide a comprehensive environmental optimization recommendation in Indonesian for new farmers in Indonesia, considering the following factors:
         - The tropical climate conditions of Indonesia
         - Traditional agricultural practices in Indonesia
