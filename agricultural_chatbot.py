@@ -1158,39 +1158,128 @@ class AICropPredictor:
 # ==================== OLLAMA CLIENT INITIALIZATION ====================
 
 def check_ollama_connection():
-    """Get available Gemma model from Ollama"""
-    response = requests.get("http://localhost:11434/api/tags", timeout=5)
-    models = response.json()
-    model_names = [model['name'] for model in models.get('models', [])]
-    
-    # Return the best available Gemma model
-    if 'gemma3:4b' in model_names:
-        return "gemma3:4b"
-    elif 'gemma2:9b' in model_names:
-        return "gemma2:9b"
-    elif 'gemma:7b' in model_names:
-        return "gemma:7b"
-    elif any('llama' in name for name in model_names):
-        return next(name for name in model_names if 'llama' in name)
-    else:
-        return "llama3.2:1b"  # Default expected model
+    """Check if Ollama is available and return the best available model"""
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=5)
+        models = response.json()
+        model_names = [model['name'] for model in models.get('models', [])]
+        
+        # Return the best available Gemma model
+        if 'gemma3:4b' in model_names:
+            return True, "gemma3:4b"
+        elif 'gemma2:9b' in model_names:
+            return True, "gemma2:9b"
+        elif 'gemma:7b' in model_names:
+            return True, "gemma:7b"
+        elif any('llama' in name for name in model_names):
+            return True, next(name for name in model_names if 'llama' in name)
+        else:
+            return True, "llama3.2:1b"  # Default expected model
+    except Exception as e:
+        print(f"⚠️ Ollama not available: {str(e)}")
+        return False, None
 
-def initialize_ollama_client():
-    """Initialize and verify Ollama client"""
-    is_connected, message = check_ollama_connection()
+def check_openrouter_connection():
+    """Check if OpenRouter is available and return the model"""
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key="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",
+        )
+        
+        # Simple test request to validate the API key
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "https://agricultural-chatbot.streamlit.app",
+                "X-Title": "Agricultural Decision Support System",
+            },
+            model="mistralai/mistral-tiny",
+            messages=[{"role": "user", "content": "Test"}],
+            max_tokens=10
+        )
+        
+        if completion.choices[0].message.content:
+            return True, "mistralai/mistral-tiny"
+        else:
+            print(f"⚠️ OpenRouter test failed - no response content")
+            return False, None
+            
+    except ImportError:
+        print("⚠️ OpenAI package not installed - falling back to requests method")
+        return check_openrouter_connection_fallback()
+    except Exception as e:
+        print(f"⚠️ OpenRouter not available: {str(e)}")
+        return False, None
+
+def check_openrouter_connection_fallback():
+    """Fallback OpenRouter connection check using requests"""
+    try:
+        # Test connection to OpenRouter
+        test_headers = {
+            "Authorization": "Bearer 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",
+            "Content-Type": "application/json"
+        }
+        
+        # Simple test request to validate the API key
+        test_response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=test_headers,
+            json={
+                "model": "mistralai/mistral-tiny",
+                "messages": [{"role": "user", "content": "Test"}],
+                "max_tokens": 10
+            },
+            timeout=10
+        )
+        
+        if test_response.status_code == 200:
+            return True, "mistralai/mistral-tiny"
+        else:
+            print(f"⚠️ OpenRouter test failed with status {test_response.status_code}")
+            return False, None
+            
+    except Exception as e:
+        print(f"⚠️ OpenRouter not available: {str(e)}")
+        return False, None
+
+def get_available_llm():
+    """Get the best available LLM service and model"""
+    # First try Ollama (preferred for local deployment)
+    ollama_available, ollama_model = check_ollama_connection()
+    if ollama_available:
+        print(f"✅ Using Ollama with model: {ollama_model}")
+        return "ollama", ollama_model
     
-    if not is_connected:
-        st.error("� **Error**: Ollama tidak tersedia!")
+    # Fallback to OpenRouter (for deployment)
+    openrouter_available, openrouter_model = check_openrouter_connection()
+    if openrouter_available:
+        print(f"✅ Using OpenRouter with model: {openrouter_model}")
+        return "openrouter", openrouter_model
+    
+    # No LLM available
+    print("❌ No LLM service available")
+    return None, None
+
+def initialize_llm_client():
+    """Initialize and verify LLM client (Ollama or OpenRouter)"""
+    llm_service, model_name = get_available_llm()
+    
+    if llm_service is None:
+        st.error("❌ **Error**: Tidak ada layanan LLM yang tersedia!")
         st.info(f"""
-        **Setup Ollama Diperlukan:**
+        **Setup LLM Diperlukan:**
         
-        **Masalah:** {message}
-        
-        **Langkah Setup:**
+        **Opsi 1 - Ollama (Lokal):**
         1. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
         2. Jalankan Ollama: `ollama serve`
         3. Download model Gemma: `ollama pull gemma2:9b` atau `ollama pull gemma:7b`
         4. Restart aplikasi ini
+        
+        **Opsi 2 - OpenRouter (Cloud):**
+        - Sistem akan otomatis menggunakan OpenRouter jika Ollama tidak tersedia
+        - Model yang digunakan: mistralai/mistral-tiny
         
         **Verifikasi:**
         - Ollama server: http://localhost:11434
@@ -1198,6 +1287,17 @@ def initialize_ollama_client():
         """)
         st.stop()
     
+    return llm_service, model_name
+    
+def call_llm(llm_service: str, model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
+    """Call LLM with the specified service and model"""
+    if llm_service == "ollama":
+        return call_ollama_llm(model_name, prompt, system_prompt, temperature, max_tokens)
+    elif llm_service == "openrouter":
+        return call_openrouter_llm(model_name, prompt, system_prompt, temperature, max_tokens)
+    else:
+        raise ValueError(f"Unknown LLM service: {llm_service}")
+
 def call_ollama_llm(model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
     """Call Ollama LLM with the specified model"""
     # Prepare the payload
@@ -1225,13 +1325,88 @@ def call_ollama_llm(model_name: str, prompt: str, system_prompt: str = None, tem
     result = response.json()
     return result.get("response", "")
 
+def call_openrouter_llm(model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
+    """Call OpenRouter LLM with the specified model using OpenAI client"""
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key="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",
+        )
+        
+        # Prepare messages
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        # Make the request
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "https://agricultural-chatbot.streamlit.app",
+                "X-Title": "Agricultural Decision Support System",
+            },
+            model=model_name,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        return completion.choices[0].message.content
+        
+    except ImportError:
+        print("⚠️ OpenAI package not installed. Using fallback requests method.")
+        return call_openrouter_llm_fallback(model_name, prompt, system_prompt, temperature, max_tokens)
+    except Exception as e:
+        print(f"⚠️ OpenRouter API error: {e}")
+        return ""
+
+def call_openrouter_llm_fallback(model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
+    """Fallback OpenRouter LLM call using requests if OpenAI package is not available"""
+    headers = {
+        "Authorization": "Bearer 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",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://agricultural-chatbot.streamlit.app",
+        "X-Title": "Agricultural Decision Support System"
+    }
+    
+    # Prepare messages
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    
+    # Prepare the payload
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    
+    # Make the request
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=120
+    )
+    
+    result = response.json()
+    if 'choices' in result and len(result['choices']) > 0:
+        return result['choices'][0]['message']['content']
+    else:
+        print(f"⚠️ OpenRouter API error: {result}")
+        return ""
+
 # ==================== DECISION SUPPORT SYSTEM ====================
 
 class DecisionSupportSystem:
     """Main class for agricultural decision support functionality"""
     
     def __init__(self):
-        self.model_name = check_ollama_connection()
+        self.llm_service, self.model_name = get_available_llm()
         self.ai_predictor = None
         self.ai_predictor_loaded = False
         self.ai_predictor_error = None
@@ -1487,7 +1662,8 @@ class DecisionSupportSystem:
         
         system_prompt = "Anda adalah ahli pertanian Indonesia yang berpengalaman dalam optimalisasi lingkungan dan praktik pertanian berkelanjutan. Berikan saran yang praktis, spesifik, dan dapat diterapkan oleh petani Indonesia."
         
-        response = call_ollama_llm(
+        response = call_llm(
+            llm_service=self.llm_service,
             model_name=self.model_name,
             prompt=prompt,
             system_prompt=system_prompt,
