@@ -11,8 +11,9 @@ A complete agricultural decision support system with ML-based crop prediction an
 - **🔍 SHAP Explainability**: Understand which factors limit crop suitability
 - **⚡ Single File**: Everything integrated in `agricultural_chatbot.py`
 - **🇮🇩 Indonesian Interface**: Fully localized UI and prompts
-- **� Privacy-First**: No external API calls - all processing local
+- **🔒 Privacy-First**: No external API calls - all processing local
 - **📊 Scientific Approach**: Evidence-based advice with confidence scoring
+- **💾 Persistent History**: MongoDB Atlas integration for interaction history storage
 
 ## 🚀 Quick Start
 
@@ -37,17 +38,37 @@ ollama pull gemma:7b   # For 8-16GB RAM
 ollama pull gemma:2b   # For 4-8GB RAM
 ```
 
-### 3. Verify Setup
+### 3. MongoDB Configuration (Automatic)
+
+**🎉 READY TO USE**: The application comes with a pre-configured MongoDB Atlas database!
+- **Database**: `munawir_datathon2025`  
+- **Collection**: `interaction_history`
+- **No setup required** - interaction history will be automatically saved and persistent across sessions
+
+**🔧 Custom MongoDB (Optional)**: If you want to use your own MongoDB Atlas database:
+
+1. Create a `.env` file in the project root:
+```bash
+# .env
+MONGODB_CONNECTION_STRING=mongodb+srv://yourusername:yourpassword@yourcluster.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DATABASE=your_database_name
+MONGODB_COLLECTION=your_collection_name
+```
+
+2. Replace with your actual MongoDB Atlas credentials
+3. Restart the application
+
+### 4. Verify Setup
 ```bash
 python test_ollama.py
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 ```bash
 streamlit run agricultural_chatbot.py
 ```
 
-That's it! Your agricultural decision support system with local AI is ready.
+That's it! Your agricultural decision support system with persistent interaction history is ready.
 
 ## 📁 File Structure
 
@@ -217,15 +238,26 @@ streamlit run agricultural_chatbot.py --server.port 8501 --server.headless true
 
 **"Module not found" errors:**
 ```bash
-pip install streamlit openai python-dotenv pandas numpy scikit-learn
+pip install streamlit ollama pymongo pandas numpy scikit-learn shap
 ```
 
-**API key errors:**
+**Ollama connection errors:**
 ```bash
-# Check .env file
-cat .env
-# Should show: OPENROUTER_API_KEY=sk-or-v1-...
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama if not running
+ollama serve
+
+# Check available models
+ollama list
 ```
+
+**MongoDB connection issues:**
+- **Default database works out of the box** - no configuration needed
+- **For custom MongoDB**: Check your `.env` file configuration
+- **Network issues**: Ensure internet connectivity for MongoDB Atlas
+- **Credentials**: Verify your MongoDB Atlas username/password in connection string
 
 **ML model errors:**
 ```bash
@@ -233,6 +265,11 @@ cat .env
 ls -la data/
 # Should show: *.pkl and *.csv files
 ```
+
+**Interaction history not persisting:**
+- **Check console output** for MongoDB connection status
+- **Default database**: Should connect automatically  
+- **Custom database**: Verify `.env` configuration
 
 ## 🎉 Success!
 

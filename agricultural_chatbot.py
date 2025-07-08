@@ -3,6 +3,35 @@ Agricultural Decision Support System - Complete Single File Version
 A simple input-output tool for crop and environmental recommendations.
 Powered by ML-based crop prediction and AI-generated environmental suggestions.
 All functionality integrated into one file for simplicity.
+
+MongoDB Configuration:
+======================
+The application uses MongoDB Atlas for persistent interaction history storage.
+
+DEFAULT MONGODB (Ready to Use):
+- Database: munawir_datathon2025  
+- Collection: interaction_history
+- Connection: Automatically configured (no setup required)
+
+CUSTOM MONGODB (Optional):
+If you want to use your own MongoDB Atlas database:
+1. Create a .env file in the project root directory
+2. Add these variables to your .env file:
+
+   MONGODB_CONNECTION_STRING=mongodb+srv://yourusername:yourpassword@yourcluster.mongodb.net/?retryWrites=true&w=majority
+   MONGODB_DATABASE=your_database_name
+   MONGODB_COLLECTION=your_collection_name
+
+3. Replace the values with your actual MongoDB Atlas credentials
+4. Restart the application
+
+Example .env file:
+   MONGODB_CONNECTION_STRING=mongodb+srv://myuser:mypass@cluster0.abc123.mongodb.net/?retryWrites=true&w=majority
+   MONGODB_DATABASE=my_agricultural_db
+   MONGODB_COLLECTION=my_interactions
+
+NOTE: If no .env file is found, the application automatically uses the provided
+MongoDB Atlas database which is ready to use immediately.
 """
 
 import streamlit as st
@@ -55,13 +84,19 @@ class MongoDBManager:
     def _connect(self):
         """Establish connection to MongoDB Atlas"""
         try:
-            # Get MongoDB configuration from environment variables
+            # Check for custom MongoDB configuration from environment variables first
             connection_string = os.getenv('MONGODB_CONNECTION_STRING')
-            database_name = os.getenv('MONGODB_DATABASE', 'agricultural_system')
-            collection_name = os.getenv('MONGODB_COLLECTION', 'interaction_history')
+            database_name = os.getenv('MONGODB_DATABASE')
+            collection_name = os.getenv('MONGODB_COLLECTION')
             
+            # If no environment variables, use default provided MongoDB
             if not connection_string or connection_string.startswith("mongodb+srv://<username>"):
-                return False
+                connection_string = "mongodb+srv://Munawir:ardavagay@cluster0.9puyslt.mongodb.net/?retryWrites=true&w=majority"
+                database_name = "munawir_datathon2025"
+                collection_name = "interaction_history"
+                print("🔗 Using provided MongoDB Atlas connection")
+            else:
+                print("🔗 Using custom MongoDB from environment variables")
             
             # Create MongoDB client with timeout
             self.client = MongoClient(connection_string, serverSelectionTimeoutMS=5000)
@@ -79,17 +114,17 @@ class MongoDBManager:
             self.collection.create_index("user_session")
             
             self.connected = True
-            print("✅ MongoDB Atlas connection established successfully")
+            print(f"✅ MongoDB Atlas connection established successfully to {database_name}")
             return True
             
         except ConnectionFailure:
-            print("⚠️ MongoDB connection failed - using local session storage")
+            print("⚠️ MongoDB connection failed - check network or credentials")
             return False
         except ServerSelectionTimeoutError:
-            print("⚠️ MongoDB connection timeout - using local session storage")
+            print("⚠️ MongoDB connection timeout - check network connectivity")
             return False
         except Exception as e:
-            print(f"⚠️ MongoDB error: {str(e)} - using local session storage")
+            print(f"⚠️ MongoDB error: {str(e)}")
             return False
     
     def save_interaction(self, interaction_data: Dict) -> bool:
@@ -107,6 +142,7 @@ class MongoDBManager:
                 "sensor_data": interaction_data["sensor_data"],
                 "ml_result": interaction_data.get("ml_result"),
                 "ai_result": interaction_data.get("ai_result"),
+                "title": interaction_data.get("title"),  # ✅ Save title field
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }
@@ -132,6 +168,7 @@ class MongoDBManager:
             
         try:
             user_session = st.session_state.get('session_id', 'anonymous')
+            print(f"🔍 Querying MongoDB for user_session: '{user_session}'")
             
             # Query recent interactions for current user
             cursor = self.collection.find(
@@ -140,14 +177,29 @@ class MongoDBManager:
             
             interactions = []
             for doc in cursor:
+                # Create title if it doesn't exist (backward compatibility)
+                title = doc.get("title")
+                if not title:
+                    # Generate title from sensor data
+                    sensor_data = doc.get("sensor_data", {})
+                    crop = sensor_data.get("selected_crop", "Unknown")
+                    location = sensor_data.get("location", "Unknown")
+                    title = f"{crop.title()} - {location}"
+                
                 interaction = {
                     "id": doc["interaction_id"],
                     "timestamp": doc["timestamp"],
                     "sensor_data": doc["sensor_data"],
                     "ml_result": doc.get("ml_result"),
-                    "ai_result": doc.get("ai_result")
+                    "ai_result": doc.get("ai_result"),
+                    "title": title  # ✅ Include title field
                 }
                 interactions.append(interaction)
+            
+            print(f"📊 Found {len(interactions)} interactions in MongoDB")
+            if len(interactions) > 0:
+                latest = interactions[0]['timestamp']
+                print(f"📅 Latest interaction: {latest}")
             
             return interactions
             
@@ -848,7 +900,17 @@ def display_sensor_input_form():
     preset_data = st.session_state.get('preset_data', None)
     
     if current_interaction:
-        st.info(f"📋 Loading data from: **{current_interaction['title']}** ({current_interaction['timestamp'].strftime('%d/%m/%Y %H:%M')})")
+        # Safe access to title with fallback
+        title = current_interaction.get('title')
+        if not title:
+            # Generate title from sensor data as fallback
+            sensor_data = current_interaction.get('sensor_data', {})
+            crop = sensor_data.get('selected_crop', 'Unknown')
+            location = sensor_data.get('location', 'Unknown')
+            title = f"{crop.title()} - {location}"
+        
+        timestamp_str = current_interaction['timestamp'].strftime('%d/%m/%Y %H:%M')
+        st.info(f"📋 Loading data from: **{title}** ({timestamp_str})")
         default_data = current_interaction['sensor_data']
         data_source = "interaction"
     elif preset_data:
@@ -1142,9 +1204,8 @@ def save_interaction(sensor_data, ml_result=None, ai_result=None):
         st.session_state.interaction_history.append(interaction)
         st.session_state.current_interaction_id = interaction['id']
         
-        # Save to MongoDB (will fallback gracefully if not connected)
+        # Save to MongoDB
         mongo_manager = get_mongodb_manager()
-        
         if mongo_manager.connected:
             save_result = mongo_manager.save_interaction(interaction)
         else:
@@ -1459,6 +1520,8 @@ def get_current_interaction_data():
         return load_interaction(st.session_state.current_interaction_id)
     return None
 
+
+
 # ==================== MAIN APPLICATION ====================
 
 def main():
@@ -1471,10 +1534,11 @@ def main():
         initial_sidebar_state="auto"
     )
     
-    # Initialize session state for interaction history
+    # Initialize session state with global session mode (no user isolation)
     if 'session_id' not in st.session_state:
-        import uuid
-        st.session_state.session_id = str(uuid.uuid4())
+        # Use consistent global session ID for agricultural application
+        # This ensures all interactions are persistent across refreshes
+        st.session_state.session_id = "agricultural_global_session"
     
     if 'interaction_history' not in st.session_state:
         st.session_state.interaction_history = []
@@ -1484,6 +1548,10 @@ def main():
             loaded_interactions = mongo_manager.load_interactions()
             if loaded_interactions:
                 st.session_state.interaction_history = loaded_interactions
+                # Show success message to user (but keep it brief per memory)
+                print(f"✅ Loaded {len(loaded_interactions)} interactions from MongoDB")
+        else:
+            print("ℹ️ MongoDB not connected - starting with empty history")
     
     if 'current_interaction_id' not in st.session_state:
         st.session_state.current_interaction_id = None
