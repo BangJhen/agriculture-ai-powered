@@ -1,17 +1,5 @@
 # Technical Report: Crop Recommendation System Using Environmental Features
 
-**Competition Submission - Advance Methodology Comparison
-| **Method** | **Threshold** | **Outliers Detected** | **Data Retention** | **Selected** |
-|------------|---------------|----------------------|-------------------|--------------|
-| Z-Score | 3.0 | 42 (1.9%) | 98.1% | ❌ |
-| IQR | 2.0 | 87 (4.0%) | 96.0% | ❌ |
-| Isolation Forest | 5% contamination | 110 (5.0%) | 95.0% | ❌ |
-| Winsorization | 0.5th-99.5th percentile | 0 (capping) | 100.0% | ✅ |
-
-**Rationale**: Winsorization selected for maximum data retention while handling extreme values. This method caps outliers at the 0.5th and 99.5th percentiles instead of removing them, preserving all 2,200 samples while mitigating the impact of extreme values on model training.ine Learning for Agricultural Decision Support**
-
----
-
 ## Executive Summary
 
 This technical report presents a comprehensive machine learning solution for crop recommendation based on environmental and soil parameters. Our approach combines traditional machine learning algorithms with state-of-the-art tabular deep learning (TabM) to achieve superior prediction accuracy exceeding 99% across 22 crop categories.
