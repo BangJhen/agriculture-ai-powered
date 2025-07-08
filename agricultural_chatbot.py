@@ -68,6 +68,596 @@ except ImportError as e:
     st.warning(f"SHAP not available: {e}")
     SHAP_AVAILABLE = False
 
+# ==================== MAP INTEGRATION IMPORTS & SETUP ====================
+
+# Map-related imports with robust error handling
+try:
+    import folium
+    FOLIUM_AVAILABLE = True
+except ImportError as e:
+    FOLIUM_AVAILABLE = False
+    FOLIUM_ERROR = str(e)
+
+try:
+    from streamlit_folium import st_folium
+    STREAMLIT_FOLIUM_AVAILABLE = True
+except ImportError as e:
+    STREAMLIT_FOLIUM_AVAILABLE = False
+    STREAMLIT_FOLIUM_ERROR = str(e)
+
+try:
+    from geopy.geocoders import Nominatim
+    from geopy.exc import GeopyError
+    GEOPY_AVAILABLE = True
+except ImportError:
+    GEOPY_AVAILABLE = False
+
+# ==================== MAP INTEGRATION FUNCTIONS ====================
+
+def create_indonesia_agricultural_map():
+    """Create map focused on Indonesia's agricultural regions"""
+    if not FOLIUM_AVAILABLE:
+        return None
+        
+    # Center on Indonesia's main agricultural areas
+    indonesia_center = [-2.5, 118.0]
+    
+    # Create map with better tiles and crosshair cursor
+    m = folium.Map(
+        location=indonesia_center,
+        zoom_start=5,
+        tiles='OpenStreetMap',
+        attr='Map data © OpenStreetMap contributors'
+    )
+    
+    # Add CSS for crosshair cursor to indicate clickable areas
+    cursor_css = """
+    <style>
+    .leaflet-container {
+        cursor: crosshair !important;
+    }
+    .leaflet-clickable {
+        cursor: crosshair !important;
+    }
+    </style>
+    """
+    m.get_root().html.add_child(folium.Element(cursor_css))
+    
+    # Add alternative tile layers
+    folium.TileLayer(
+        tiles='https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+        attr='© OpenStreetMap contributors, Tiles style by Humanitarian OpenStreetMap Team',
+        name='Humanitarian',
+        overlay=False,
+        control=True
+    ).add_to(m)
+    
+    # Add only a few key agricultural regions as reference
+    agricultural_regions = [
+        {
+            "name": "Jawa Barat - Rice Belt", 
+            "coords": [-6.9, 107.6], 
+            "crop": "🌾",
+            "info": "Referensi: Major rice production area"
+        },
+        {
+            "name": "Sumatra Utara - Palm Oil", 
+            "coords": [3.6, 98.7], 
+            "crop": "🌴",
+            "info": "Referensi: Major palm oil plantation region"
+        },
+        {
+            "name": "Sulawesi Selatan - Rice", 
+            "coords": [-5.1, 119.4], 
+            "crop": "🌾",
+            "info": "Referensi: Eastern Indonesia rice production"
+        }
+    ]
+    
+    for region in agricultural_regions:
+        popup_text = f"""
+        <div style="font-family: Arial; font-size: 12px;">
+            <h4 style="margin: 0; color: #2E7D32;">{region['crop']} {region['name']}</h4>
+            <p style="margin: 5px 0; color: #666;">{region['info']}</p>
+            <p style="margin: 0; font-size: 10px; color: #888;">
+                📍 {region['coords'][0]:.2f}°, {region['coords'][1]:.2f}°
+            </p>
+        </div>
+        """
+        
+        folium.Marker(
+            region["coords"],
+            popup=folium.Popup(popup_text, max_width=250),
+            tooltip=f"🌱 Referensi: {region['name']}",
+            icon=folium.Icon(color='lightgreen', icon='leaf', prefix='fa')
+        ).add_to(m)
+    
+    # Add layer control
+    folium.LayerControl().add_to(m)
+    
+    # Add instruction marker
+    folium.Marker(
+        [-10, 118],
+        popup="""
+        <div style="font-family: Arial; font-size: 16px; color: #1976D2; text-align: center;">
+            <h2 style="margin: 0; color: #1976D2;">🎯 SINGLE PIN MODE!</h2>
+            <p style="margin: 10px 0; font-size: 14px;">
+                ✅ Klik di mana saja untuk pin merah<br/>
+                🔄 Klik lagi untuk pindahkan pin<br/>
+                📍 Hanya 1 pin aktif bersamaan<br/>
+                🖱️ Cursor: Crosshair untuk precision
+            </p>
+            <div style="background: #FFF3CD; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                <strong>🗺️ Mode Pin Tunggal:</strong><br/>
+                • Klik pertama = Tambah pin<br/>
+                • Klik kedua = Pindah pin<br/>
+                • Lebih mudah & fokus pada 1 lokasi
+            </div>
+        </div>
+        """,
+        tooltip="📍 MODE: Single Pin - Klik untuk tambah/pindah",
+        icon=folium.Icon(color='blue', icon='exclamation', prefix='fa')
+    ).add_to(m)
+    
+    return m
+
+def add_user_marker_to_map(base_map, lat, lng, address):
+    """Add a dynamic red pin marker to the map when user clicks"""
+    if not base_map:
+        return base_map
+        
+    # Create simple popup with only location name and coordinates
+    popup_html = f"""
+    <div style="font-family: Arial; font-size: 14px; text-align: center; min-width: 200px;">
+        <h3 style="margin: 0; color: #D32F2F;">📍 {address.split(',')[0]}</h3>
+        <hr style="margin: 8px 0; border: 1px solid #D32F2F;">
+        
+        <div style="background: #FFEBEE; padding: 8px; border-radius: 5px; margin: 8px 0;">
+            <p style="margin: 0; font-family: monospace; font-size: 12px;">
+                <strong>Latitude:</strong> {lat:.6f}°<br/>
+                <strong>Longitude:</strong> {lng:.6f}°
+            </p>
+        </div>
+        
+        <div style="margin-top: 8px;">
+            <small style="color: #666;">📍 Klik untuk detail lengkap di sidebar</small>
+        </div>
+    </div>
+    """
+    
+    # Add the red pin marker with simple popup
+    user_marker = folium.Marker(
+        [lat, lng],
+        popup=folium.Popup(popup_html, max_width=250),
+        tooltip=f"📍 {address.split(',')[0]}: {lat:.4f}°, {lng:.4f}°",
+        icon=folium.Icon(color='red', icon='map-pin', prefix='fa')
+    )
+    
+    # Add circle around marker for emphasis
+    folium.Circle(
+        [lat, lng],
+        radius=1000,  # 1km radius
+        color='red',
+        fillColor='red',
+        fillOpacity=0.1,
+        weight=2,
+        tooltip=f"Area radius 1km dari {address.split(',')[0]}"
+    ).add_to(base_map)
+    
+    user_marker.add_to(base_map)
+    return base_map
+
+def geocode_location(address):
+    """Geocode an address to coordinates using Nominatim"""
+    if not GEOPY_AVAILABLE:
+        return None
+        
+    try:
+        geolocator = Nominatim(user_agent="agricultural_decision_support")
+        location = geolocator.geocode(
+            address, 
+            country_codes=['id'],  # Limit to Indonesia
+            timeout=10
+        )
+        
+        if location:
+            return {
+                'lat': location.latitude,
+                'lng': location.longitude,
+                'display_name': location.address
+            }
+        else:
+            return None
+            
+    except GeopyError as e:
+        print(f"Geocoding error: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return None
+
+def reverse_geocode_location(lat, lng):
+    """Reverse geocode coordinates to address with detailed fallback"""
+    if not GEOPY_AVAILABLE:
+        return estimate_location_from_coords(lat, lng)
+        
+    try:
+        geolocator = Nominatim(user_agent="agricultural_decision_support_v2")
+        location = geolocator.reverse(
+            f"{lat}, {lng}",
+            language='id',  # Indonesian language
+            timeout=15,
+            exactly_one=True
+        )
+        
+        if location and location.address:
+            # Get detailed address components
+            address_parts = []
+            raw_address = location.raw.get('address', {})
+            
+            # Try to build a more specific address from components
+            if raw_address.get('village'):
+                address_parts.append(raw_address['village'])
+            elif raw_address.get('suburb'):
+                address_parts.append(raw_address['suburb'])
+            elif raw_address.get('neighbourhood'):
+                address_parts.append(raw_address['neighbourhood'])
+            
+            if raw_address.get('city'):
+                address_parts.append(raw_address['city'])
+            elif raw_address.get('town'):
+                address_parts.append(raw_address['town'])
+            elif raw_address.get('municipality'):
+                address_parts.append(raw_address['municipality'])
+            
+            if raw_address.get('state'):
+                address_parts.append(raw_address['state'])
+            elif raw_address.get('province'):
+                address_parts.append(raw_address['province'])
+            
+            if raw_address.get('country'):
+                address_parts.append(raw_address['country'])
+            
+            # Create detailed address or use full address
+            if address_parts:
+                detailed_address = ", ".join(address_parts)
+                return detailed_address
+            else:
+                return location.address
+        else:
+            return estimate_location_from_coords(lat, lng)
+            
+    except GeopyError as e:
+        print(f"GeoPy Error: {e}")
+        return estimate_location_from_coords(lat, lng)
+    except Exception as e:
+        print(f"Reverse geocoding error: {e}")
+        return estimate_location_from_coords(lat, lng)
+
+def estimate_location_from_coords(lat, lng):
+    """Estimate location name from coordinates (simplified)"""
+    
+    # Simple region detection based on coordinates
+    if -8 <= lat <= -5 and 105 <= lng <= 115:
+        if 105 <= lng <= 108:
+            return "Jawa Barat, Indonesia"
+        elif 108 <= lng <= 112:
+            return "Jawa Tengah, Indonesia"  
+        else:
+            return "Jawa Timur, Indonesia"
+    elif -3 <= lat <= 6 and 95 <= lng <= 108:
+        if 95 <= lng <= 100:
+            return "Sumatra Barat, Indonesia"
+        elif 100 <= lng <= 104:
+            return "Sumatra Utara, Indonesia"
+        else:
+            return "Sumatra, Indonesia"
+    elif -6 <= lat <= 2 and 108 <= lng <= 120:
+        return "Kalimantan, Indonesia"
+    elif -12 <= lat <= 2 and 115 <= lng <= 125:
+        return "Sulawesi, Indonesia"
+    elif -10 <= lat <= -8 and 105 <= lng <= 125:
+        return "Nusa Tenggara, Indonesia"
+    elif -6 <= lat <= 6 and 125 <= lng <= 145:
+        return "Papua, Indonesia"
+    else:
+        return f"Indonesia ({lat:.2f}°, {lng:.2f}°)"
+
+def display_fallback_location_input():
+    """Fallback location input when map libraries are not available"""
+    st.markdown("**Lokasi/Daerah**")
+    location = st.text_input(
+        "Lokasi/Daerah", 
+        value="Jawa Barat, Indonesia",
+        help="Lokasi umum untuk pertimbangan regional",
+        label_visibility="collapsed"
+    )
+    
+    if location:
+        return {
+            'address': location,
+            'coordinates': None,
+            'source': 'text_fallback'
+        }
+    return None
+
+def enhanced_location_input():
+    """Enhanced location input with map integration for agricultural chatbot"""
+    
+    # Initialize single location in session state (only 1 pin allowed)
+    if 'selected_location_pin' not in st.session_state:
+        st.session_state.selected_location_pin = None
+    
+    # Check if map functionality is available
+    if not STREAMLIT_FOLIUM_AVAILABLE or not FOLIUM_AVAILABLE:
+        st.error("⚠️ **Interactive Map tidak tersedia** - Map libraries tidak terinstall")
+        st.info("💡 **Solusi:** Gunakan tab 'Search Location' untuk mencari lokasi dengan nama daerah")
+        
+        # Show only search option as fallback
+        st.markdown("### 🔍 Search Location (Fallback Mode)")
+        search_query = st.text_input(
+            "Cari lokasi...", 
+            placeholder="Contoh: Subang, Jawa Barat",
+            help="Masukkan nama kota, kecamatan, atau daerah",
+            key="fallback_search_input"
+        )
+        
+        if search_query and len(search_query) > 2:
+            if st.button("🔍 Cari Lokasi", type="primary", key="fallback_search_btn"):
+                with st.spinner(f"🔍 Mencari '{search_query}'..."):
+                    location_result = geocode_location(search_query)
+                    
+                if location_result:
+                    st.success(f"✅ **Lokasi ditemukan:** {location_result['display_name']}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.info(f"📍 **Latitude:** {location_result['lat']:.6f}")
+                    with col2:
+                        st.info(f"📍 **Longitude:** {location_result['lng']:.6f}")
+                    
+                    # Store in session state
+                    st.session_state.selected_location = {
+                        'coordinates': {'lat': location_result['lat'], 'lng': location_result['lng']},
+                        'address': location_result['display_name'],
+                        'source': 'search_fallback'
+                    }
+                    
+                    # Also store in temp_coordinates for form access
+                    st.session_state.temp_coordinates = {'lat': location_result['lat'], 'lng': location_result['lng']}
+                else:
+                    st.error(f"❌ Lokasi '{search_query}' tidak ditemukan")
+        return  # Exit function early for fallback
+    
+    # Create tabs for different input methods (removed Manual Input)
+    tab1, tab2 = st.tabs(["🗺️ Interactive Map", "🔍 Search Location"])
+    
+    with tab1:
+        st.markdown("**🎯 SINGLE PIN MODE - KLIK UNTUK TAMBAH/PINDAH PIN MERAH:**")
+        
+        # Enhanced instructions for single pin mode
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info("🖱️ **Cursor crosshair** untuk presisi")
+        with col2:
+            st.info("📍 **1 Pin merah** saja yang aktif")
+        with col3:
+            st.info("🔄 **Klik lagi** untuk pindah lokasi")
+        
+        # Create base map
+        m = create_indonesia_agricultural_map()
+        
+        if m is None:
+            st.error("❌ Tidak dapat membuat peta")
+            st.info("💡 **Solusi:** Gunakan tab 'Search Location' untuk mencari lokasi dengan koordinat GPS")
+            return  # Exit function early
+        
+        # Add single pin if exists
+        if st.session_state.selected_location_pin:
+            loc = st.session_state.selected_location_pin
+            m = add_user_marker_to_map(
+                m, 
+                loc['lat'], 
+                loc['lng'], 
+                loc['address']
+            )
+        
+        # Display map with error handling
+        try:
+            # Use timestamp for map key to ensure refresh when pin updates
+            map_key = f"agricultural_map_{st.session_state.get('map_refresh_counter', 0)}"
+            
+            map_data = st_folium(
+                m, 
+                width=700, 
+                height=400, 
+                returned_objects=["last_object_clicked", "last_clicked"],  # Both for better compatibility
+                key=map_key,
+                feature_group_to_add=None,  # Allow clicking anywhere
+                use_container_width=True
+            )
+            
+            # Handle new map clicks (check both last_clicked and last_object_clicked)
+            clicked_data = None
+            if map_data and map_data.get('last_clicked'):
+                clicked_data = map_data['last_clicked']
+            elif map_data and map_data.get('last_object_clicked'):
+                clicked_data = map_data['last_object_clicked']
+            
+            if clicked_data and clicked_data.get('lat') and clicked_data.get('lng'):
+                lat = clicked_data['lat']
+                lng = clicked_data['lng']
+                
+                # Check if this is a different location from current pin
+                is_new_location = True
+                if st.session_state.selected_location_pin:
+                    current_pin = st.session_state.selected_location_pin
+                    if abs(lat - current_pin['lat']) < 0.00001 and abs(lng - current_pin['lng']) < 0.00001:
+                        is_new_location = False
+                
+                if is_new_location:
+                    # Get address for the new location
+                    action_text = "🔄 Memindahkan pin merah ke lokasi baru..." if st.session_state.selected_location_pin else "🔍 Menambahkan pin merah dan menganalisis lokasi..."
+                    with st.spinner(action_text):
+                        address = reverse_geocode_location(lat, lng)
+                    
+                    # Replace the single pin location
+                    st.session_state.selected_location_pin = {
+                        'lat': lat,
+                        'lng': lng,
+                        'address': address,
+                        'timestamp': 1  # Always 1 since only 1 pin allowed
+                    }
+                    
+                    # Increment refresh counter to force map update
+                    st.session_state.map_refresh_counter = st.session_state.get('map_refresh_counter', 0) + 1
+                    
+                    # Force refresh to show updated marker
+                    st.rerun()
+                
+                # Display current selection info
+                is_moved = st.session_state.get('map_refresh_counter', 0) > 1
+                success_message = "🔄 **PIN MERAH BERHASIL DIPINDAHKAN!**" if is_moved else "🎉 **PIN MERAH BERHASIL DITAMBAHKAN!**"
+                st.success(success_message)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        label="📍 Latitude Saat Ini", 
+                        value=f"{lat:.6f}°",
+                        help="Koordinat lintang (utara-selatan)"
+                    )
+                with col2:
+                    st.metric(
+                        label="📍 Longitude Saat Ini", 
+                        value=f"{lng:.6f}°",
+                        help="Koordinat bujur (timur-barat)"
+                    )
+                
+                # Show address
+                if st.session_state.selected_location_pin:
+                    current_address = st.session_state.selected_location_pin['address']
+                    st.info(f"🏞️ **Alamat Estimasi:** {current_address}")
+                
+                # Store in session state for form submission
+                st.session_state.selected_location = {
+                    'coordinates': {'lat': lat, 'lng': lng},
+                    'address': current_address if 'current_address' in locals() else address,
+                    'source': 'map_click_with_red_pin',
+                    'pin_mode': 'single'  # Indicator for single pin mode
+                }
+                
+                # Also store in temp_coordinates for form access
+                st.session_state.temp_coordinates = {'lat': lat, 'lng': lng}
+                
+            else:
+                # Show instructions for single pin mode
+                if not st.session_state.selected_location_pin:
+                    st.info("🖱️ **Hover cursor di peta - lihat crosshair! Klik untuk menambah pin merah**")
+                    st.markdown("""
+                    💡 **Mode Pin Tunggal:**
+                    - 🖱️ Cursor berubah jadi crosshair untuk presisi
+                    - 📍 Klik sekali untuk menambah pin merah
+                    - 🔄 Klik lagi untuk memindahkan pin ke lokasi baru
+                    - 📍 Hanya 1 pin yang bisa aktif dalam waktu bersamaan
+                    """)
+                else:
+                    st.success("📍 **Pin merah sudah aktif!** Klik lokasi lain untuk memindahkan pin.")
+                    
+                    # Show current pin information
+                    pin = st.session_state.selected_location_pin
+                    location_name = pin['address'].split(',')[0]
+                    with st.expander("📍 Lokasi Saat Ini Dipilih", expanded=True):
+                        st.markdown(f"**📍 {location_name}**")
+                        st.markdown(f"**Koordinat:** `{pin['lat']:.6f}°, {pin['lng']:.6f}°`")
+                        st.markdown(f"**Alamat Lengkap:** {pin['address']}")
+                        st.markdown(f"**Google Maps:** [🗺️ Buka Lokasi](https://www.google.com/maps?q={pin['lat']},{pin['lng']})")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("🔄 Klik Peta untuk Pindah", type="secondary", key="move_pin_info"):
+                                st.info("💡 Klik di lokasi baru pada peta untuk memindahkan pin")
+                        with col2:
+                            if st.button("🗑️ Hapus Pin", type="secondary", key="clear_pin_tab1"):
+                                # Clear all location-related session state
+                                st.session_state.selected_location_pin = None
+                                st.session_state.selected_location = None
+                                st.session_state.temp_coordinates = None
+                                st.session_state.map_refresh_counter = st.session_state.get('map_refresh_counter', 0) + 1
+                                print("🗑️ PIN CLEARED - All location session state reset")
+                                st.rerun()
+                
+        except Exception as e:
+            st.error(f"❌ Error loading interactive map: {str(e)}")
+            st.info("💡 **Solusi:** Gunakan tab 'Search Location' untuk mencari lokasi dengan koordinat GPS")
+    
+    with tab2:
+        st.markdown("**🔍 Cari lokasi dengan nama daerah untuk mendapat koordinat GPS:**")
+        
+        # Location search
+        search_query = st.text_input(
+            "Cari lokasi...", 
+            placeholder="Contoh: Subang, Jawa Barat",
+            help="Masukkan nama kota, kecamatan, atau daerah",
+            key="location_search_input"
+        )
+        
+        if search_query and len(search_query) > 2:
+            if st.button("🔍 Cari Lokasi", type="primary", key="search_location_btn"):
+                with st.spinner(f"🔍 Mencari '{search_query}'..."):
+                    location_result = geocode_location(search_query)
+                    
+                if location_result:
+                    st.success(f"✅ **Lokasi ditemukan:** {location_result['display_name']}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.info(f"📍 **Latitude:** {location_result['lat']:.6f}")
+                    with col2:
+                        st.info(f"📍 **Longitude:** {location_result['lng']:.6f}")
+                    
+                    # Store in session state
+                    st.session_state.selected_location = {
+                        'coordinates': {'lat': location_result['lat'], 'lng': location_result['lng']},
+                        'address': location_result['display_name'],
+                        'source': 'search'
+                    }
+                    
+                    # Also store in temp_coordinates for form access
+                    st.session_state.temp_coordinates = {'lat': location_result['lat'], 'lng': location_result['lng']}
+                else:
+                    st.error(f"❌ Lokasi '{search_query}' tidak ditemukan")
+                    st.info("💡 Coba gunakan nama yang lebih spesifik atau gunakan Interactive Map")
+    
+
+
+def display_map_system_status():
+    """Display map system status for debugging"""
+    with st.expander("🗺️ Map System Status", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if STREAMLIT_FOLIUM_AVAILABLE:
+                st.success("✅ Streamlit-Folium")
+            else:
+                st.error("❌ Streamlit-Folium")
+                if 'STREAMLIT_FOLIUM_ERROR' in globals():
+                    st.caption(f"Error: {STREAMLIT_FOLIUM_ERROR}")
+        
+        with col2:
+            if FOLIUM_AVAILABLE:
+                st.success("✅ Folium")
+            else:
+                st.error("❌ Folium")
+                if 'FOLIUM_ERROR' in globals():
+                    st.caption(f"Error: {FOLIUM_ERROR}")
+        
+        with col3:
+            if GEOPY_AVAILABLE:
+                st.success("✅ Geopy")
+            else:
+                st.warning("⚠️ Geopy: Limited")
+
 # ==================== MONGODB INTEGRATION ====================
 
 class MongoDBManager:
@@ -134,6 +724,17 @@ class MongoDBManager:
             return False
             
         try:
+            # Debug: Print location and coordinates data before saving
+            sensor_data = interaction_data.get("sensor_data", {})
+            coordinates = sensor_data.get("coordinates")
+            location = sensor_data.get("location")
+            location_source = sensor_data.get("location_source", "N/A")
+            
+            print(f"🔍 Saving interaction to MongoDB with:")
+            print(f"  📍 Location: {location}")
+            print(f"  🌍 Coordinates: {coordinates}")
+            print(f"  📊 Location Source: {location_source}")
+            
             # Prepare document with proper datetime handling
             document = {
                 "interaction_id": interaction_data["id"],
@@ -154,7 +755,14 @@ class MongoDBManager:
                 upsert=True
             )
             
-            return result.acknowledged
+            if result.acknowledged:
+                print(f"✅ Interaction successfully saved to MongoDB")
+                if coordinates:
+                    print(f"  🌍 GPS coordinates confirmed saved: {coordinates}")
+                return True
+            else:
+                print("❌ Failed to save interaction to MongoDB")
+                return False
             
         except Exception as e:
             print(f"⚠️ Could not save to database: {str(e)}")
@@ -913,6 +1521,9 @@ def display_sensor_input_form():
         st.info(f"📋 Loading data from: **{title}** ({timestamp_str})")
         default_data = current_interaction['sensor_data']
         data_source = "interaction"
+        
+        # Restore location data to session state (important for refresh/reload scenarios)
+        restore_location_from_interaction(current_interaction)
     elif preset_data:
         preset_name = st.session_state.get('preset_name', 'Preset')
         st.info(f"📋 Using preset: **{preset_name}** (you can modify parameters below)")
@@ -922,6 +1533,53 @@ def display_sensor_input_form():
         st.markdown("*Masukkan kondisi lingkungan lahan Anda untuk mendapatkan rekomendasi yang dipersonalisasi*")
         default_data = {}
         data_source = "new"
+    
+    # Map Integration Section (OUTSIDE FORM for interactivity)
+    st.markdown("---")
+    st.markdown("### 📍 Lokasi Lahan Pertanian")
+    
+    # Display map system status (optional debug info)
+    display_map_system_status()
+    
+    # Enhanced location input with map (OUTSIDE form for click functionality)
+    enhanced_location_input()  # This function now stores data in session state
+    
+    # Extract location information from session state with debugging
+    location_data = st.session_state.get('selected_location', None)
+    selected_pin = st.session_state.get('selected_location_pin', None)
+    
+    # Debug session state
+    print(f"🔍 Form location extraction:")
+    print(f"  📍 selected_location: {location_data}")
+    print(f"  📍 selected_location_pin: {selected_pin}")
+    
+    # Priority: Use pin data if available (more persistent)
+    if selected_pin:
+        location = selected_pin['address']
+        st.session_state.temp_coordinates = {'lat': selected_pin['lat'], 'lng': selected_pin['lng']}
+        st.session_state.selected_location = {
+            'coordinates': {'lat': selected_pin['lat'], 'lng': selected_pin['lng']},
+            'address': selected_pin['address'],
+            'source': 'map_click_with_red_pin'
+        }
+        print(f"  ✅ Using pin data: {location} @ {st.session_state.temp_coordinates}")
+    elif location_data:
+        if location_data.get('coordinates'):
+            # Use formatted address from map
+            location = location_data['address']
+            # Store coordinates for potential future use
+            st.session_state.temp_coordinates = location_data['coordinates']
+            print(f"  ✅ Using selected_location with coords: {location} @ {st.session_state.temp_coordinates}")
+        else:
+            # Use manual input address
+            location = location_data['address']
+            st.session_state.temp_coordinates = None
+            print(f"  📝 Using manual input: {location}")
+    else:
+        # No location selected - encourage user to use available methods
+        location = "Belum dipilih - gunakan Interactive Map atau Search Location"
+        st.session_state.temp_coordinates = None
+        print(f"  ⚠️ No location selected - user needs to choose method")
     
     # Create stable form key (don't change based on preset_data content)
     form_key = f"sensor_data_form_{data_source}_{st.session_state.current_interaction_id or 'new'}"
@@ -948,7 +1606,22 @@ def display_sensor_input_form():
             # Additional context
             st.markdown("**Opsional**")
             field_size = st.number_input("Ukuran Lahan (hektar)", min_value=0.1, max_value=1000.0, value=float(default_data.get('field_size', 1.0)), step=0.1, help="Ukuran lahan pertanian")
-            location = st.text_input("Lokasi/Daerah", value=default_data.get('location', "Jawa Barat, Indonesia"), help="Lokasi umum untuk pertimbangan regional")
+        
+        # Location info display (read-only in form)
+        st.markdown("---")
+        st.markdown("**📍 Lokasi Terpilih**")
+        if location:
+            st.info(f"📍 **Lokasi:** {location}")
+            if hasattr(st.session_state, 'temp_coordinates') and st.session_state.temp_coordinates:
+                coords = st.session_state.temp_coordinates
+                st.info(f"🎯 **Koordinat GPS:** {coords['lat']:.6f}°, {coords['lng']:.6f}°")
+                # Show source information
+                source = "Map Click" if st.session_state.get('selected_location_pin') else "Search/Manual"
+                st.success(f"✅ **Sumber:** {source} | **Status:** Koordinat tersedia")
+            else:
+                st.warning("⚠️ **Tidak ada koordinat GPS** - gunakan tab Interactive Map atau Search Location di atas")
+        else:
+            st.warning("⚠️ Silakan pilih lokasi di atas terlebih dahulu")
         
         # Crop selection section below the 3 columns
         st.markdown("---")
@@ -1045,7 +1718,14 @@ def display_sensor_input_form():
             st.session_state['show_llm_dialog'] = False
 
         if submitted:
-            # Prepare sensor data
+            # Debug all session state data before processing
+            print(f"🚀 FORM SUBMISSION STARTED:")
+            print(f"  📍 Current location variable: {location}")
+            print(f"  🗺️ selected_location_pin: {st.session_state.get('selected_location_pin')}")
+            print(f"  📊 selected_location: {st.session_state.get('selected_location')}")
+            print(f"  🎯 temp_coordinates: {st.session_state.get('temp_coordinates')}")
+            
+            # Prepare sensor data with enhanced location information
             sensor_data = {
                 'N': nitrogen,
                 'P': phosphorus,
@@ -1058,6 +1738,39 @@ def display_sensor_input_form():
                 'location': location,
                 'selected_crop': selected_crop
             }
+            
+            # Determine location source and coordinates with priority logic
+            if st.session_state.get('selected_location_pin'):
+                # Highest priority: Direct pin data
+                pin_data = st.session_state.selected_location_pin
+                sensor_data['coordinates'] = {'lat': pin_data['lat'], 'lng': pin_data['lng']}
+                sensor_data['location_source'] = 'map_click_with_red_pin'
+                print(f"✅ Using PIN DATA - Coordinates: {sensor_data['coordinates']}")
+            elif hasattr(st.session_state, 'temp_coordinates') and st.session_state.temp_coordinates:
+                # Second priority: temp_coordinates
+                sensor_data['coordinates'] = st.session_state.temp_coordinates
+                source_data = st.session_state.get('selected_location', {})
+                sensor_data['location_source'] = source_data.get('source', 'map_click_with_red_pin')
+                print(f"✅ Using TEMP_COORDINATES - Coordinates: {sensor_data['coordinates']}")
+            else:
+                # No coordinates available - user needs to select location
+                sensor_data['location_source'] = 'not_selected'
+                print(f"⚠️ NO COORDINATES - User must select location using Interactive Map or Search")
+            
+            # Debug: Print final sensor data before saving
+            print(f"📊 FINAL SENSOR DATA:")
+            print(f"  📍 Location: {sensor_data.get('location')}")
+            print(f"  🌍 Coordinates: {sensor_data.get('coordinates')}")
+            print(f"  📊 Location Source: {sensor_data.get('location_source')}")
+            
+            # Validate location selection
+            if sensor_data.get('location_source') == 'not_selected' or not sensor_data.get('coordinates'):
+                st.error("❌ **Lokasi belum dipilih!** Silakan pilih lokasi menggunakan:")
+                st.info("🗺️ **Interactive Map** - Klik pada peta untuk menambah pin merah")
+                st.info("🔍 **Search Location** - Cari nama daerah untuk mendapat koordinat GPS")
+                return None
+            
+            print(f"  🔄 Validation passed - Ready for MongoDB save")
             
             # ✅ Clear preset data AFTER successful form submission
             if preset_data:
@@ -1153,7 +1866,7 @@ def display_results(sensor_data, decision_system):
     
     # Summary Section
     st.markdown("### 📋 Ringkasan Cepat")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Ukuran Lahan", f"{sensor_data.get('field_size', 'N/A')} ha")
@@ -1169,6 +1882,51 @@ def display_results(sensor_data, decision_system):
             confidence = ml_evaluation[1] * 100  # Convert to percentage
             st.metric("Tingkat Kesesuaian", f"{confidence:.1f}%")
         st.metric("Tanggal Analisis", datetime.now().strftime("%Y-%m-%d"))
+    
+    with col4:
+        # Enhanced location display with coordinates
+        location_display = sensor_data.get('location', 'N/A')
+        if len(location_display) > 25:
+            location_display = location_display[:22] + "..."
+        st.metric("Lokasi", location_display)
+        
+        # Show coordinates if available
+        if sensor_data.get('coordinates'):
+            coords = sensor_data['coordinates']
+            st.metric("Koordinat", f"{coords['lat']:.3f}°, {coords['lng']:.3f}°")
+        else:
+            st.metric("Sumber Lokasi", sensor_data.get('location_source', 'Manual'))
+    
+    # Enhanced location information section
+    if sensor_data.get('coordinates') or sensor_data.get('location_source') == 'map':
+        st.markdown("---")
+        st.markdown("### 📍 Detail Lokasi Lengkap")
+        
+        with st.expander("🗺️ Informasi Lokasi & Koordinat", expanded=False):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**📌 Informasi Lokasi:**")
+                st.markdown(f"- **Alamat:** {sensor_data.get('location', 'N/A')}")
+                st.markdown(f"- **Sumber:** {sensor_data.get('location_source', 'Manual')}")
+                
+                if sensor_data.get('coordinates'):
+                    coords = sensor_data['coordinates']
+                    st.markdown(f"- **Akurasi Koordinat:** ±10 meter")
+                    st.markdown(f"- **Format GPS:** {coords['lat']:.6f}°, {coords['lng']:.6f}°")
+            
+            with col2:
+                if sensor_data.get('coordinates'):
+                    coords = sensor_data['coordinates']
+                    st.markdown("**🔗 Link Eksternal:**")
+                    st.markdown(f"- [📱 Google Maps](https://www.google.com/maps?q={coords['lat']},{coords['lng']})")
+                    st.markdown(f"- [🌍 Google Earth](https://earth.google.com/web/@{coords['lat']},{coords['lng']},1000a,35y,0h,0t,0r)")
+                    st.markdown(f"- **📋 Copy Koordinat:** `{coords['lat']:.6f}, {coords['lng']:.6f}`")
+                else:
+                    st.markdown("**ℹ️ Info:**")
+                    st.markdown("- Koordinat GPS tidak tersedia")
+                    st.markdown("- Gunakan Interactive Map untuk koordinat presisi")
+                    st.markdown("- Analisis berdasarkan nama lokasi")
     
     # Update current interaction with results
     if st.session_state.current_interaction_id and (ml_evaluation or ai_evaluation):
@@ -1227,6 +1985,59 @@ def load_interaction(interaction_id):
         if interaction['id'] == interaction_id:
             return interaction
     return None
+
+def restore_location_from_interaction(interaction_data):
+    """Restore location data to session state from loaded interaction"""
+    if not interaction_data:
+        print("⚠️ No interaction data to restore location from")
+        return
+    
+    sensor_data = interaction_data.get('sensor_data', {})
+    coordinates = sensor_data.get('coordinates')
+    location = sensor_data.get('location')
+    location_source = sensor_data.get('location_source', 'unknown')
+    
+    print(f"🔄 Restoring location from interaction:")
+    print(f"  📍 Location: {location}")
+    print(f"  🌍 Coordinates: {coordinates}")
+    print(f"  📊 Source: {location_source}")
+    
+    if coordinates and location:
+        # Restore to session state for map display and form usage
+        st.session_state.selected_location = {
+            'coordinates': coordinates,
+            'address': location,
+            'source': location_source
+        }
+        
+        # Also restore temp_coordinates for form integration
+        st.session_state.temp_coordinates = coordinates
+        
+        # If it's from map click, also restore to pin state for map display
+        if location_source == 'map_click_with_red_pin':
+            st.session_state.selected_location_pin = {
+                'lat': coordinates['lat'],
+                'lng': coordinates['lng'],
+                'address': location,
+                'timestamp': 1  # Single pin mode
+            }
+            # Force map refresh to show restored pin
+            st.session_state.map_refresh_counter = st.session_state.get('map_refresh_counter', 0) + 1
+        else:
+            # Clear pin state for non-map sources
+            st.session_state.selected_location_pin = None
+        
+        print(f"✅ Location restored to session state:")
+        print(f"  📍 selected_location: {st.session_state.selected_location}")
+        print(f"  🌍 temp_coordinates: {st.session_state.temp_coordinates}")
+        if hasattr(st.session_state, 'selected_location_pin') and st.session_state.selected_location_pin:
+            print(f"  📍 selected_location_pin: {st.session_state.selected_location_pin}")
+    else:
+        print("⚠️ No coordinates found in interaction - clearing location session state")
+        # Clear location session state if no coordinates
+        st.session_state.selected_location = None
+        st.session_state.temp_coordinates = None
+        st.session_state.selected_location_pin = None
 
 def display_interaction_history():
     """Display interaction history in sidebar"""
@@ -1353,6 +2164,8 @@ def display_interaction_history():
                 if st.button("📂", key=f"load_{interaction['id']}", help=f"Load {crop_display} from {location_short}", 
                            use_container_width=True, type="secondary"):
                     st.session_state.current_interaction_id = interaction['id']
+                    # Restore location data to session state for map display
+                    restore_location_from_interaction(interaction)
                     st.rerun()
         
         # Add confidence badge if available
@@ -1550,6 +2363,13 @@ def main():
                 st.session_state.interaction_history = loaded_interactions
                 # Show success message to user (but keep it brief per memory)
                 print(f"✅ Loaded {len(loaded_interactions)} interactions from MongoDB")
+                
+                # If there's a current_interaction_id set, restore its location data
+                if st.session_state.get('current_interaction_id'):
+                    current_interaction = get_current_interaction_data()
+                    if current_interaction:
+                        restore_location_from_interaction(current_interaction)
+                        print(f"🔄 Location restored for current interaction on app startup")
         else:
             print("ℹ️ MongoDB not connected - starting with empty history")
     
@@ -1591,6 +2411,14 @@ def main():
     # Header
     st.title("🌾 Sistem Pendukung Keputusan Pertanian Indonesia")
     st.markdown("*Dapatkan rekomendasi tanaman instan dan saran optimisasi lingkungan berdasarkan kondisi lahan Anda*")
+    
+    # Map integration status
+    if STREAMLIT_FOLIUM_AVAILABLE and FOLIUM_AVAILABLE:
+        st.success("🗺️ **NEW**: Interactive Map (Single Pin Mode) - Klik untuk tambah/pindah pin dengan koordinat presisi!")
+    elif FOLIUM_AVAILABLE:
+        st.warning("🗺️ Map mode tersedia terbatas (folium only)")
+    else:
+        st.info("🗺️ Map mode tidak tersedia - menggunakan input lokasi manual")
     
 
     
