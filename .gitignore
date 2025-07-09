@@ -218,20 +218,20 @@ yarn-debug.log*
 yarn-error.log*
 
 # Data files (if you add datasets later)
-*.csv
-*.json
-*.xlsx
-*.xls
-data/
-datasets/
+# *.csv
+# *.json
+# *.xlsx
+# *.xls
+# data/
+# datasets/
 
 # Model files (if you add ML models)
-*.pkl
-*.joblib
-*.h5
-*.pb
-models/
-checkpoints/
+# *.pkl
+# *.joblib
+# *.h5
+# *.pb
+# models/
+# checkpoints/
 
 # Documentation build
 docs/_build/
