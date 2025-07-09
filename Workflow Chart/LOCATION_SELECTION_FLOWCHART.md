@@ -1,111 +1,111 @@
-# 📍 Flowchart Pemilihan Lokasi - Agricultural Chatbot
+# 📍 Flowchart Pemilihan Lokasi - Agricultural Chatbot (Simplified)
 
-## Alur Pemilihan Lokasi Lahan Pertanian
+## Alur Pemilihan Lokasi Lahan Pertanian - Versi Sederhana
 
 ```mermaid
 flowchart TD
-    A[🌾 User Masuk ke Aplikasi] --> B[📍 Pilih Lokasi Lahan]
+    Start[🌾 User Masuk ke Aplikasi] --> Check{Cek Status Lokasi}
     
-    B --> C{Pilih Metode Lokasi}
+    %% Status Checking
+    Check -->|Pin Map Aktif| PinFlow[📍 Mode Pin Map]
+    Check -->|GPS Selesai| GPSFlow[🛰️ Mode GPS Completed]
+    Check -->|Belum Ada Lokasi| TabFlow[📋 Mode Pilih Lokasi]
     
-    C -->|Tab 1| D[🗺️ Interactive Map]
-    C -->|Tab 2| E[🔍 Search Location]
+    %% Pin Map Mode
+    PinFlow --> PinInfo[📍 Tampilkan Info Pin]
+    PinInfo --> PinAction{User Action}
+    PinAction -->|Geser Pin| MovPin[🔄 Pindah Pin] 
+    PinAction -->|Hapus Pin| DelPin[🗑️ Hapus Pin]
+    MovPin --> PinInfo
+    DelPin --> TabFlow
     
-    %% Interactive Map Flow
-    D --> F[📋 Tampilkan Peta Indonesia]
-    F --> G[👆 User Klik Lokasi di Peta]
-    G --> H[📍 Pin Merah Muncul]
-    H --> I[🔄 Reverse Geocoding]
-    I --> J[📍 Dapat Koordinat + Alamat]
+    %% GPS Completed Mode  
+    GPSFlow --> GPSInfo[✅ Tampilkan Status GPS]
+    GPSInfo --> GPSAction{User Action}
+    GPSAction -->|Reset| ResetGPS[🗑️ Reset GPS]
+    ResetGPS --> TabFlow
     
-    %% Search Location Flow  
-    E --> K[⌨️ User Ketik Nama Lokasi]
-    K --> L[🔍 Geocoding API]
-    L --> M{Lokasi Ditemukan?}
-    M -->|Ya| N[📍 Dapat Koordinat + Alamat]
-    M -->|Tidak| O[❌ Error: Lokasi Tidak Ditemukan]
-    O --> K
+    %% Tab Selection Mode
+    TabFlow --> ChooseTab{Pilih Metode}
     
-    %% Convergence
-    J --> P[💾 Simpan ke Session State]
-    N --> P
+    ChooseTab -->|Tab 1| GPS[🛰️ GPS Location]
+    ChooseTab -->|Tab 2| Map[🗺️ Interactive Map] 
+    ChooseTab -->|Tab 3| Search[🔍 Search Location]
     
-    P --> Q[✅ Validasi Koordinat]
-    Q --> R{Koordinat Valid?}
+    %% GPS Flow
+    GPS --> GPSDetect[📱 Deteksi GPS]
+    GPSDetect --> GPSSuccess{Berhasil?}
+    GPSSuccess -->|Ya| GPSAutoRefresh[🔄 Auto-Refresh]
+    GPSSuccess -->|Tidak| GPS
+    GPSAutoRefresh --> GPSFlow
     
-    R -->|Ya| S[📋 Tampilkan Info Lokasi]
-    R -->|Tidak| T[⚠️ Error: Pilih Lokasi Lagi]
-    T --> C
+    %% Map Flow
+    Map --> ShowMap[🗺️ Tampilkan Peta]
+    ShowMap --> ClickMap[👆 Klik Lokasi]
+    ClickMap --> AddPin[📍 Tambah Pin Merah]
+    AddPin --> PinFlow
     
-    S --> U[📊 Form Sensor Data Siap]
-    U --> V[🚀 User Submit Form]
-    V --> W[💾 Simpan ke MongoDB]
+    %% Search Flow
+    Search --> TypeLocation[⌨️ Ketik Nama Lokasi]
+    TypeLocation --> SearchAPI[🔍 Cari Koordinat]
+    SearchAPI --> SearchResult{Ditemukan?}
+    SearchResult -->|Ya| SaveSearch[💾 Simpan Lokasi]
+    SearchResult -->|Tidak| TypeLocation
+    SaveSearch --> FormReady
+    
+    %% Final Steps
+    PinInfo --> FormReady[📊 Lokasi Siap untuk Form]
+    GPSInfo --> FormReady
+    
+    FormReady --> SubmitForm[🚀 Submit Form Sensor]
+    SubmitForm --> SaveDB[💾 Simpan ke MongoDB]
     
     %% Styling
-    classDef mapStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef searchStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef processStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    classDef errorStyle fill:#ffebee,stroke:#d32f2f,stroke-width:2px
-    classDef successStyle fill:#e0f2f1,stroke:#00796b,stroke-width:2px
+    classDef startStyle fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    classDef checkStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef gpsStyle fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    classDef mapStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef searchStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px
+    classDef finalStyle fill:#e0f2f1,stroke:#00796b,stroke-width:2px
     
-    class D,F,G,H,I,J mapStyle
-    class E,K,L,M,N searchStyle
-    class P,Q,U,V,W processStyle
-    class O,T errorStyle
-    class S,W successStyle
+    class Start startStyle
+    class Check,PinAction,GPSAction,ChooseTab,GPSSuccess,SearchResult checkStyle
+    class GPS,GPSDetect,GPSAutoRefresh,GPSFlow,GPSInfo,ResetGPS gpsStyle
+    class Map,ShowMap,ClickMap,AddPin,PinFlow,PinInfo,MovPin,DelPin mapStyle
+    class Search,TypeLocation,SearchAPI,SaveSearch searchStyle
+    class FormReady,SubmitForm,SaveDB finalStyle
 ```
 
-## 📋 Penjelasan Alur
+## 📋 Penjelasan Alur Sederhana
 
-### 🗺️ **Interactive Map Flow**
-1. **Tampilkan Peta** - Peta Indonesia dengan marker default
-2. **User Klik** - User klik di lokasi yang diinginkan
-3. **Pin Merah** - Sistem tambah pin merah di lokasi klik
-4. **Reverse Geocoding** - Konversi koordinat ke alamat lengkap
-5. **Hasil** - Koordinat GPS + alamat detail (contoh: "Kelurahan Soklat, Subang, Jawa Barat, Indonesia")
+### 🔄 **3 Mode Utama:**
 
-### 🔍 **Search Location Flow**
-1. **Input Pencarian** - User ketik nama lokasi (contoh: "Subang")
-2. **Geocoding API** - Sistem cari koordinat dari nama lokasi
-3. **Validasi** - Cek apakah lokasi ditemukan
-4. **Hasil** - Koordinat GPS + alamat lengkap atau error jika tidak ditemukan
+| Mode | Kondisi | Tampilan |
+|------|---------|----------|
+| 📍 **Pin Map** | Ada pin aktif | Info pin + map untuk geser |
+| 🛰️ **GPS Completed** | GPS berhasil | Status GPS + tombol reset |
+| 📋 **Pilih Lokasi** | Belum ada lokasi | 3 tabs lokasi |
 
-### 💾 **Data Processing**
-1. **Session State** - Simpan lokasi ke `selected_location`, `temp_coordinates`, `selected_location_pin`
-2. **Validasi** - Cek apakah koordinat valid dan tersedia
-3. **Form Integration** - Tampilkan info lokasi di form sensor data
-4. **MongoDB Save** - Simpan ke database saat form disubmit
+### 📱 **3 Metode Input:**
 
-## 🎯 **Key Features**
+| Tab | Metode | Hasil |
+|-----|--------|-------|
+| **1** | 🛰️ GPS Location | Auto-hide tabs |
+| **2** | 🗺️ Interactive Map | Auto-hide tabs + pin aktif |
+| **3** | 🔍 Search Location | Langsung ke form |
 
-| Feature | Interactive Map | Search Location |
-|---------|----------------|----------------|
-| **Input Method** | Klik peta | Ketik nama |
-| **Akurasi** | Sangat tinggi | Tinggi |
-| **User Experience** | Visual & intuitif | Cepat & familiar |
-| **Koordinat** | Presisi tinggi | Sesuai geocoding |
-| **Error Handling** | Minimal | Validasi input |
+### 🗑️ **Reset Actions:**
 
-## 🛡️ **Validasi & Error Handling**
+- **Hapus Pin** → Kembali ke mode tabs
+- **Reset GPS** → Kembali ke mode tabs  
+- **Reset Semua** → Clear semua data lokasi
 
-- ✅ **Koordinat Valid** - Lat/lng dalam range Indonesia
-- ✅ **Alamat Lengkap** - Minimal level kelurahan/desa
-- ❌ **Lokasi Tidak Ditemukan** - Retry dengan nama lain
-- ❌ **Koordinat Kosong** - Wajib pilih lokasi sebelum submit
+### 📊 **Flow Linear:**
 
-## 📊 **Output Data Structure**
-
-```json
-{
-  "coordinates": {
-    "lat": -6.123456,
-    "lng": 107.654321
-  },
-  "address": "Kelurahan Soklat, Subang, Jawa Barat, Indonesia",
-  "location_source": "map_click_with_red_pin" // atau "search_location"
-}
+```
+Start → Cek Status → Mode Aktif → User Action → Form → MongoDB
 ```
 
 ---
 
-*Flowchart ini menunjukkan 2 jalur utama pemilihan lokasi yang masing-masing menghasilkan data koordinat GPS yang diperlukan untuk analisis pertanian.* 
+*Flowchart sederhana tanpa garis bersilangan - fokus pada 3 mode utama dan flow linear.* 🎯 
