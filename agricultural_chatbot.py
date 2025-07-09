@@ -35,6 +35,7 @@ MongoDB Atlas database which is ready to use immediately.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import pandas as pd
 import numpy as np
@@ -47,13 +48,23 @@ from typing import Dict, List, Tuple, Any
 import warnings
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
-from sentence_transformers import SentenceTransformer
 
-modelembed = SentenceTransformer("all-MiniLM-L6-v2")
-client = QdrantClient(url="http://localhost:6333") 
-
+# Temporary workaround - disable sentence transformers to fix PyTorch import error
+try:
+    from sentence_transformers import SentenceTransformer
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models
+    
+    modelembed = SentenceTransformer("all-MiniLM-L6-v2")
+    client = QdrantClient(url="http://localhost:6333")
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+    print("✅ SentenceTransformers loaded successfully")
+except ImportError as e:
+    print(f"⚠️ SentenceTransformers/Qdrant not available: {e}")
+    print("📌 Program akan berjalan tanpa fitur knowledge base")
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    modelembed = None
+    client = None
 
 # Suppress warnings first
 warnings.filterwarnings('ignore')
@@ -98,6 +109,244 @@ try:
     GEOPY_AVAILABLE = True
 except ImportError:
     GEOPY_AVAILABLE = False
+
+# ==================== GPS LOCATION FUNCTIONS ====================
+
+def request_gps_permission():
+    """Request GPS permission from user using browser's geolocation API"""
+    gps_html = """
+    <script>
+    function requestLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(showPosition, showError, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 60000
+            });
+        } else {
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                value: {
+                    status: 'error',
+                    message: 'Geolocation tidak didukung oleh browser ini'
+                }
+            }, '*');
+        }
+    }
+
+    function showPosition(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: {
+                status: 'success',
+                latitude: lat,
+                longitude: lng,
+                accuracy: accuracy
+            }
+        }, '*');
+    }
+
+    function showError(error) {
+        let message = '';
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                message = "User menolak permintaan geolocation";
+                break;
+            case error.POSITION_UNAVAILABLE:
+                message = "Informasi lokasi tidak tersedia";
+                break;
+            case error.TIMEOUT:
+                message = "Permintaan geolocation timeout";
+                break;
+            default:
+                message = "Error tidak diketahui saat mengambil lokasi";
+                break;
+        }
+        
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: {
+                status: 'error',
+                message: message
+            }
+        }, '*');
+    }
+
+    // Auto-request location when component loads
+    requestLocation();
+    </script>
+    
+    <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
+        <h3>📍 Meminta Izin Lokasi GPS</h3>
+        <p>Browser akan meminta izin untuk mengakses lokasi Anda...</p>
+        <div style="margin: 10px 0;">
+            <button onclick="requestLocation()" style="
+                background: #0066cc; 
+                color: white; 
+                border: none; 
+                padding: 10px 20px; 
+                border-radius: 5px; 
+                cursor: pointer;
+                font-size: 16px;
+            ">🔄 Minta Izin Lokasi Lagi</button>
+        </div>
+        <p style="font-size: 12px; color: #666;">
+            Jika popup tidak muncul, coba klik tombol di atas atau periksa pengaturan browser Anda
+        </p>
+    </div>
+    """
+    
+    return components.html(gps_html, height=200)
+
+def get_user_gps_location():
+    """Get user's GPS location and return coordinates with address"""
+    st.markdown("### 📍 Lokasi GPS Anda")
+    
+    # Initialize GPS session state
+    if 'gps_permission_requested' not in st.session_state:
+        st.session_state.gps_permission_requested = False
+    if 'gps_location_data' not in st.session_state:
+        st.session_state.gps_location_data = None
+    
+    # Request GPS permission
+    if not st.session_state.gps_permission_requested:
+        st.info("🔐 Klik tombol di bawah untuk meminta izin akses lokasi GPS Anda")
+        
+        if st.button("📍 Minta Izin Lokasi GPS", type="primary", key="request_gps_btn"):
+            st.session_state.gps_permission_requested = True
+            st.rerun()
+    
+    if st.session_state.gps_permission_requested:
+        # Request location using HTML component
+        location_result = request_gps_permission()
+        
+        if location_result and isinstance(location_result, dict):
+            if location_result.get('status') == 'success':
+                lat = location_result.get('latitude')
+                lng = location_result.get('longitude')
+                accuracy = location_result.get('accuracy', 0)
+                
+                if lat and lng:
+                    st.success("✅ **Lokasi GPS berhasil didapatkan!**")
+                    
+                    # Get address from coordinates
+                    with st.spinner("🔍 Menganalisis alamat dari koordinat GPS..."):
+                        address = reverse_geocode_location(lat, lng)
+                    
+                    # Display location info
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric(
+                            label="📍 Latitude GPS", 
+                            value=f"{lat:.6f}°",
+                            help="Koordinat lintang dari GPS Anda"
+                        )
+                    with col2:
+                        st.metric(
+                            label="📍 Longitude GPS", 
+                            value=f"{lng:.6f}°",
+                            help="Koordinat bujur dari GPS Anda"
+                        )
+                    with col3:
+                        st.metric(
+                            label="🎯 Akurasi GPS", 
+                            value=f"{accuracy:.0f}m",
+                            help="Tingkat akurasi GPS (semakin kecil semakin akurat)"
+                        )
+                    
+                    # Show address
+                    st.info(f"🏞️ **Alamat Anda:** {address}")
+                    
+                    # Accuracy indicator
+                    if accuracy < 10:
+                        st.success("🎯 **Akurasi GPS Sangat Baik** (<10m)")
+                    elif accuracy < 50:
+                        st.info("🎯 **Akurasi GPS Baik** (<50m)")
+                    else:
+                        st.warning("🎯 **Akurasi GPS Sedang** (>50m) - Pastikan GPS aktif dan di area terbuka")
+                    
+                    # Store in session state
+                    st.session_state.selected_location = {
+                        'coordinates': {'lat': lat, 'lng': lng},
+                        'address': address,
+                        'source': 'gps',
+                        'accuracy': accuracy
+                    }
+                    
+                    # Also store in temp_coordinates for form access
+                    st.session_state.temp_coordinates = {'lat': lat, 'lng': lng}
+                    
+                    # Store GPS data
+                    st.session_state.gps_location_data = {
+                        'lat': lat,
+                        'lng': lng,
+                        'address': address,
+                        'accuracy': accuracy,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    # Additional info
+                    with st.expander("📱 Detail Lokasi GPS", expanded=False):
+                        st.markdown(f"**📱 Sumber:** GPS Browser/Device")
+                        st.markdown(f"**📍 Koordinat:** `{lat:.6f}°, {lng:.6f}°`")
+                        st.markdown(f"**🎯 Akurasi:** {accuracy:.1f} meter")
+                        st.markdown(f"**🏞️ Alamat Lengkap:** {address}")
+                        st.markdown(f"**Google Maps:** [🗺️ Buka Lokasi](https://www.google.com/maps?q={lat},{lng})")
+                    
+                    return True
+                    
+            elif location_result.get('status') == 'error':
+                error_msg = location_result.get('message', 'Unknown error')
+                st.error(f"❌ **Error GPS:** {error_msg}")
+                
+                # Provide solutions based on error type
+                if 'menolak' in error_msg.lower() or 'denied' in error_msg.lower():
+                    st.warning("💡 **Solusi:** Klik icon lokasi di address bar browser dan pilih 'Allow'")
+                elif 'timeout' in error_msg.lower():
+                    st.warning("💡 **Solusi:** Pastikan GPS aktif dan coba lagi di area terbuka")
+                else:
+                    st.warning("💡 **Solusi:** Gunakan tab 'Interactive Map' atau 'Search Location' sebagai alternatif")
+                
+                # Reset permission to allow retry
+                if st.button("🔄 Coba Lagi", type="secondary", key="gps_retry_btn"):
+                    st.session_state.gps_permission_requested = False
+                    st.rerun()
+        
+        # Show current GPS data if available
+        if st.session_state.gps_location_data:
+            gps_data = st.session_state.gps_location_data
+            st.success("✅ **GPS Location Tersimpan**")
+            
+            with st.expander("📍 Lokasi GPS Saat Ini", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**📍 Latitude:** {gps_data['lat']:.6f}°")
+                    st.markdown(f"**📍 Longitude:** {gps_data['lng']:.6f}°")
+                with col2:
+                    st.markdown(f"**🎯 Akurasi:** {gps_data['accuracy']:.1f}m")
+                    st.markdown(f"**🕐 Waktu:** {gps_data['timestamp'][:19].replace('T', ' ')}")
+                
+                st.markdown(f"**🏞️ Alamat:** {gps_data['address']}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🔄 Update Lokasi GPS", type="secondary", key="update_gps_btn"):
+                        st.session_state.gps_permission_requested = False
+                        st.session_state.gps_location_data = None
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ Hapus Data GPS", type="secondary", key="clear_gps_btn"):
+                        st.session_state.gps_location_data = None
+                        st.session_state.selected_location = None
+                        st.session_state.temp_coordinates = None
+                        st.session_state.gps_permission_requested = False
+                        st.rerun()
+    
+    return False
 
 # ==================== MAP INTEGRATION FUNCTIONS ====================
 
@@ -436,8 +685,8 @@ def enhanced_location_input():
                     st.error(f"❌ Lokasi '{search_query}' tidak ditemukan")
         return  # Exit function early for fallback
     
-    # Create tabs for different input methods (removed Manual Input)
-    tab1, tab2 = st.tabs(["🗺️ Interactive Map", "🔍 Search Location"])
+    # Create tabs for different input methods (added GPS Location)
+    tab1, tab2, tab3 = st.tabs(["🗺️ Interactive Map", "🔍 Search Location", "📍 GPS Location"])
     
     with tab1:
         st.markdown("**🎯 SINGLE PIN MODE - KLIK UNTUK TAMBAH/PINDAH PIN MERAH:**")
@@ -635,6 +884,12 @@ def enhanced_location_input():
                 else:
                     st.error(f"❌ Lokasi '{search_query}' tidak ditemukan")
                     st.info("💡 Coba gunakan nama yang lebih spesifik atau gunakan Interactive Map")
+    
+    with tab3:
+        st.markdown("**📍 Gunakan GPS device/browser untuk mendapat lokasi presisi:**")
+        
+        # GPS location section
+        get_user_gps_location()
     
 
 
@@ -1334,30 +1589,44 @@ def call_ollama_llm(model_name: str, prompt: str, system_prompt: str = None, tem
 
 def create_query(SC, MLC) :
         """Create a query for the knowledge base"""
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            return ""
+        
         prompt = f"Sekarang saya memiliki db knowledge base yang berisi informasi tentang pertanian di Indonesia. Saya ingin mencari informasi terkait dengan pertanian, tanaman, dan lingkungan. Berikut adalah pertanyaan saya:\n\n{SC}\n\nSaya juga ingin mempertimbangkan hasil evaluasi ML berikut:\n\n{MLC}\n\n berikan saya query ke qdrant yang relevan untuk menapatkan informasi yang relevan dalam bahasa inggris."
-        response =  client.chat.completions.create(
-                model="anthropic/claude-3.5-sonnet",
-                messages=[
-                    {"role": "system", "content": "You are an expert Indonesian agricultural advisor focused on environmental optimization and sustainable farming practices."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=2000
-            )
-        return response.choices[0].message.content.strip()
+        
+        try:
+            response =  client.chat.completions.create(
+                    model="anthropic/claude-3.5-sonnet",
+                    messages=[
+                        {"role": "system", "content": "You are an expert Indonesian agricultural advisor focused on environmental optimization and sustainable farming practices."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+            return response.choices[0].message.content.strip()
+        except:
+            return ""
 
 def query_knowledge_base(query_text, top_k=3):
-        # Buat embedding dari query
-        embeddings = modelembed.encode(query_text)
-        # Query ke Qdrant
-        results = client.qdrant_client.search(
-            collection_name="pdf_knowledge",
-            query_vector=embeddings,
-            limit=top_k
-        )
-        # Ambil hasil payload (teks knowledge)
-        knowledge_chunks = [hit.payload.get("text", "") for hit in results]
-        return knowledge_chunks
+        if not SENTENCE_TRANSFORMERS_AVAILABLE or modelembed is None or client is None:
+            return []
+        
+        try:
+            # Buat embedding dari query
+            embeddings = modelembed.encode(query_text)
+            # Query ke Qdrant
+            results = client.qdrant_client.search(
+                collection_name="pdf_knowledge",
+                query_vector=embeddings,
+                limit=top_k
+            )
+            # Ambil hasil payload (teks knowledge)
+            knowledge_chunks = [hit.payload.get("text", "") for hit in results]
+            return knowledge_chunks
+        except Exception as e:
+            print(f"⚠️ Error in query_knowledge_base: {e}")
+            return []
 
 def call_openrouter_llm(model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
     """Call OpenRouter LLM with the specified model using OpenAI client"""
@@ -1565,9 +1834,16 @@ class DecisionSupportSystem:
                 **Evaluasi Tanaman Berbasis ML:**
                 - Hasil: {str(ml_evaluation)}
                 """
-        query_text = self.create_query(ml_context, sensor_context)
-        knowledge_chunks = self.query_knowledge_base(query_text, top_k=3)
-        knowledge_context = "\n\n".join([f"Referensi {i+1}: {chunk}" for i, chunk in enumerate(knowledge_chunks) if chunk])
+        query_text = create_query(ml_context, sensor_context)
+        knowledge_chunks = query_knowledge_base(query_text, top_k=3)
+        
+        # Generate knowledge context with fallback
+        if knowledge_chunks and SENTENCE_TRANSFORMERS_AVAILABLE:
+            knowledge_context = "\n\n".join([f"Referensi {i+1}: {chunk}" for i, chunk in enumerate(knowledge_chunks) if chunk])
+            knowledge_status = "✅ Knowledge base available"
+        else:
+            knowledge_context = ""
+            knowledge_status = "⚠️ Knowledge base tidak tersedia - menggunakan AI general knowledge"
 
         # Enhanced prompt with technical research insights
         technical_context = """
@@ -1964,7 +2240,17 @@ def display_sensor_input_form():
                 sensor_data['coordinates'] = st.session_state.temp_coordinates
                 source_data = st.session_state.get('selected_location', {})
                 sensor_data['location_source'] = source_data.get('source', 'map_click_with_red_pin')
+                
+                # Add GPS accuracy if available
+                if source_data.get('source') == 'gps' and source_data.get('accuracy'):
+                    sensor_data['gps_accuracy'] = source_data['accuracy']
+                elif st.session_state.get('gps_location_data'):
+                    gps_data = st.session_state.gps_location_data
+                    sensor_data['gps_accuracy'] = gps_data.get('accuracy', 10)
+                
                 print(f"✅ Using TEMP_COORDINATES - Coordinates: {sensor_data['coordinates']}")
+                if sensor_data.get('gps_accuracy'):
+                    print(f"✅ GPS Accuracy: {sensor_data['gps_accuracy']}m")
             else:
                 # No coordinates available - user needs to select location
                 sensor_data['location_source'] = 'not_selected'
@@ -2239,6 +2525,24 @@ def restore_location_from_interaction(interaction_data):
         else:
             # Clear pin state for non-map sources
             st.session_state.selected_location_pin = None
+        
+        # If it's from GPS, also restore to GPS session state
+        if location_source == 'gps':
+            # Extract GPS-specific data if available
+            gps_accuracy = sensor_data.get('gps_accuracy', 10)  # Default accuracy
+            st.session_state.gps_location_data = {
+                'lat': coordinates['lat'],
+                'lng': coordinates['lng'],
+                'address': location,
+                'accuracy': gps_accuracy,
+                'timestamp': datetime.now().isoformat()  # Current timestamp for restored data
+            }
+            st.session_state.gps_permission_requested = True  # Mark as GPS already used
+            print(f"✅ GPS location data restored to session state")
+        else:
+            # Clear GPS state for non-GPS sources
+            if hasattr(st.session_state, 'gps_location_data'):
+                st.session_state.gps_location_data = None
         
         print(f"✅ Location restored to session state:")
         print(f"  📍 selected_location: {st.session_state.selected_location}")
@@ -2566,6 +2870,10 @@ def main():
         # This ensures all interactions are persistent across refreshes
         st.session_state.session_id = "agricultural_global_session"
     
+    # Initialize GPS permission dialog state
+    if 'gps_welcome_shown' not in st.session_state:
+        st.session_state.gps_welcome_shown = False
+    
     if 'interaction_history' not in st.session_state:
         st.session_state.interaction_history = []
         # Try to load existing interactions from MongoDB
@@ -2633,9 +2941,63 @@ def main():
     else:
         st.info("🗺️ Map mode tidak tersedia - menggunakan input lokasi manual")
     
-
+    # GPS Welcome Dialog for first-time users
+    if not st.session_state.gps_welcome_shown:
+        @st.dialog("🌍 Izin Akses Lokasi GPS")
+        def show_gps_welcome():
+            st.markdown("""
+            ### 📍 Akses Lokasi untuk Rekomendasi yang Lebih Akurat
+            
+            Aplikasi ini dapat menggunakan lokasi GPS Anda untuk:
+            - ✅ **Rekomendasi tanaman** yang sesuai dengan daerah Anda
+            - ✅ **Analisis kondisi iklim** berdasarkan lokasi spesifik  
+            - ✅ **Saran optimasi** berdasarkan karakteristik geografis
+            
+            ---
+            
+            **🔐 Privasi & Keamanan:**
+            - Lokasi hanya digunakan untuk analisis pertanian
+            - Data tidak dibagikan kepada pihak ketiga
+            - Anda bisa gunakan alternatif lain jika tidak mengizinkan
+            
+            **📱 Cara Kerja:**
+            1. Browser akan menampilkan popup "izin lokasi"
+            2. Pilih "Allow" atau "Izinkan" untuk akses GPS
+            3. Lokasi akan otomatis terdeteksi untuk analisis
+            """)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📍 **Izinkan GPS**", type="primary", use_container_width=True):
+                    st.session_state.gps_welcome_shown = True
+                    st.session_state.gps_welcome_choice = "allow"
+                    st.rerun()
+            
+            with col2:
+                if st.button("🗺️ **Gunakan Map**", type="secondary", use_container_width=True):
+                    st.session_state.gps_welcome_shown = True
+                    st.session_state.gps_welcome_choice = "map"
+                    st.rerun()
+            
+            with col3:
+                if st.button("⏭️ **Skip**", type="secondary", use_container_width=True):
+                    st.session_state.gps_welcome_shown = True
+                    st.session_state.gps_welcome_choice = "skip"
+                    st.rerun()
+            
+            st.info("💡 **Catatan:** Anda dapat mengubah pilihan ini kapan saja di bagian lokasi")
+        
+        show_gps_welcome()
+        return  # Exit early to show dialog
     
-
+    # Show welcome message based on user choice
+    if st.session_state.get('gps_welcome_choice') == 'allow':
+        st.success("📍 **GPS diizinkan!** Silakan gunakan tab 'GPS Location' untuk akses lokasi otomatis")
+    elif st.session_state.get('gps_welcome_choice') == 'map':
+        st.info("🗺️ **Mode Map dipilih!** Gunakan tab 'Interactive Map' untuk memilih lokasi dengan klik")
+    elif st.session_state.get('gps_welcome_choice') == 'skip':
+        st.info("⏭️ **GPS dilewati.** Anda dapat menggunakan 'Search Location' untuk mencari dengan nama daerah")
     
     # Initialize decision support system
     decision_system = DecisionSupportSystem()
