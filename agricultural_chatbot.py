@@ -1615,7 +1615,7 @@ class DecisionSupportSystem:
         # prompt = f"""
         # Anda adalah penasihat pertanian Indonesia yang ahli, didukung oleh penelitian machine learning terdepan dengan akurasi 99.5%.
         
-        
+        #{knowledge_context}
         # {sensor_context}
         # {ml_context}
         
@@ -1702,7 +1702,7 @@ class DecisionSupportSystem:
         response = call_llm(
             llm_service=self.llm_service,
             model_name=self.model_name,
-            prompt=technical_context + "\n\n" + sensor_context + "\n\n" + ml_context + "\n\n" + knowledge_context,
+            prompt=prompt,
             system_prompt=system_prompt,
             temperature=0.7,
             max_tokens=2000
