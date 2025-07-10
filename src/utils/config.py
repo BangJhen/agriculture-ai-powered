@@ -71,7 +71,7 @@ LLM_CONFIG = {
     },
     'openrouter': {
         'base_url': 'https://openrouter.ai/api/v1',
-        'api_key': os.getenv('OPENROUTER_API_KEY', 'sk-or-v1-d6c4ab9f3f5f27e45c9c5dfa2d8e9e4e5f4e3c2a9b8d7e6f5a4b3c2d1e9f8a7b6'),
+        'api_key': os.getenv('OPENROUTER_API_KEY', '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'),
         'default_model': 'mistralai/mistral-tiny',
         'timeout': 60
     },
@@ -142,7 +142,8 @@ SENSOR_PARAMS = {
     'temperature': {'min': 8.8, 'max': 43.7, 'default': 25.0, 'unit': '°C'},
     'humidity': {'min': 14.3, 'max': 99.9, 'default': 71.0, 'unit': '%'},
     'ph': {'min': 3.5, 'max': 9.9, 'default': 6.5, 'unit': ''},
-    'rainfall': {'min': 20.2, 'max': 298.6, 'default': 103.0, 'unit': 'mm'}
+    'rainfall': {'min': 20.2, 'max': 298.6, 'default': 103.0, 'unit': 'mm'},
+    'land_area': {'min': 0.1, 'max': 1000.0, 'default': 1.0, 'unit': 'ha'}
 }
 
 # ==================== ERROR MESSAGES ====================

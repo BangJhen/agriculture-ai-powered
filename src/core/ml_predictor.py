@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Any, Optional, List
 
+
+
 # Import config and utilities
 from ..utils.config import ML_CONFIG, CROP_MAPPING, SENSOR_PARAMS
 from ..utils.helpers import safe_float, handle_error, format_confidence_score
@@ -105,18 +107,85 @@ class AICropPredictor:
             # Get SHAP values
             shap_values = self.explainer.shap_values(scaled_data)
             
-            # Extract feature importance
-            if hasattr(shap_values, '__len__') and len(shap_values) > 1:
-                # Multi-class classification
-                shap_values = shap_values[0]  # Take first class
+            # Handle different SHAP value formats properly
+            # For RandomForest multi-class: shap_values is list of arrays [class1_shap, class2_shap, ...]
+            # For binary classification: shap_values is single array
             
-            feature_importance = dict(zip(engineered_data.columns, shap_values[0]))
+            final_shap_values = None
             
-            # Generate explanation
-            return self._generate_shap_explanation(feature_importance, input_data, selected_crop, confidence)
+            if isinstance(shap_values, list):
+                # Multi-class classification - get SHAP values for target crop
+                if len(shap_values) > 1:
+                    crop_classes = self.label_encoder.classes_
+                    if selected_crop in crop_classes:
+                        crop_index = list(crop_classes).index(selected_crop)
+                        if crop_index < len(shap_values):
+                            final_shap_values = shap_values[crop_index]
+                        else:
+                            # Fallback to first class
+                            final_shap_values = shap_values[0]
+                    else:
+                        # Crop not found, use first class
+                        final_shap_values = shap_values[0]
+                else:
+                    # Single class in list
+                    final_shap_values = shap_values[0]
+            else:
+                # Single array (binary classification or single output)
+                final_shap_values = shap_values
+            
+            # Ensure we have a proper 1D array for single instance
+            if final_shap_values is not None:
+                # Handle different SHAP value structures intelligently
+                if len(final_shap_values.shape) == 3:
+                    # Shape is (n_samples, n_features, n_classes) - extract for target crop
+                    crop_classes = self.label_encoder.classes_
+                    
+                    if selected_crop in crop_classes:
+                        crop_index = list(crop_classes).index(selected_crop)
+                        # Take first sample, all features, target crop class
+                        final_shap_values = final_shap_values[0, :, crop_index]
+                    else:
+                        # Fallback to first class
+                        final_shap_values = final_shap_values[0, :, 0]
+                
+                elif len(final_shap_values.shape) == 2:
+                    # Shape is (n_features, n_samples) or (n_samples, n_features)
+                    n_features = len(engineered_data.columns)
+                    
+                    if final_shap_values.shape[0] == n_features:
+                        # Shape is (n_features, n_samples) - take first sample
+                        final_shap_values = final_shap_values[:, 0]
+                    elif final_shap_values.shape[1] == n_features:
+                        # Shape is (n_samples, n_features) - take first sample
+                        final_shap_values = final_shap_values[0, :]
+                    else:
+                        print(f"⚠️ Cannot match SHAP shape {final_shap_values.shape} to {n_features} features")
+                        return self._generate_simple_explanation(input_data, selected_crop, confidence)
+                
+                elif len(final_shap_values.shape) != 1:
+                    print(f"⚠️ Unexpected SHAP values dimension: {len(final_shap_values.shape)}")
+                    return self._generate_simple_explanation(input_data, selected_crop, confidence)
+                
+                # Final validation
+                if len(final_shap_values) != len(engineered_data.columns):
+                    print(f"⚠️ Dimension mismatch: {len(final_shap_values)} SHAP values vs {len(engineered_data.columns)} features")
+                    return self._generate_simple_explanation(input_data, selected_crop, confidence)
+                
+                # Create feature importance dictionary
+                feature_importance = dict(zip(engineered_data.columns, final_shap_values))
+                
+                # Generate explanation
+                return self._generate_shap_explanation(feature_importance, input_data, selected_crop, confidence)
+            else:
+                print("⚠️ Could not extract SHAP values properly, using simple explanation")
+                return self._generate_simple_explanation(input_data, selected_crop, confidence)
             
         except Exception as e:
             print(f"⚠️ Error generating SHAP explanation: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
+            import traceback
+            print(f"   Traceback: {traceback.format_exc()}")
             return self._generate_simple_explanation(input_data, selected_crop, confidence)
     
     def _generate_simple_explanation(self, input_data: Dict[str, float], selected_crop: str, confidence: float) -> str:
@@ -160,26 +229,57 @@ class AICropPredictor:
                                   selected_crop: str, confidence: float) -> str:
         """Generate explanation using SHAP feature importance"""
         
-        # Sort features by absolute importance
-        sorted_features = sorted(feature_importance.items(), key=lambda x: abs(x[1]), reverse=True)
-        
-        explanations = []
-        
-        for feature, importance in sorted_features[:5]:  # Top 5 features
-            # Map engineered feature back to original parameter
-            original_param = self._map_feature_to_param(feature)
+        try:
+            # Validate feature importance data
+            if not feature_importance or len(feature_importance) == 0:
+                print("⚠️ Empty feature importance dictionary, using simple explanation")
+                return self._generate_simple_explanation(input_data, selected_crop, confidence)
             
-            if original_param in input_data:
-                value = input_data[original_param]
-                impact = "mendukung" if importance > 0 else "menghambat"
-                strength = "sangat" if abs(importance) > 0.1 else "cukup"
+            # Filter out any non-numeric values
+            valid_features = {}
+            for feature, importance in feature_importance.items():
+                try:
+                    # Ensure importance is a number
+                    if hasattr(importance, 'item'):  # Handle numpy scalars
+                        importance = float(importance.item())
+                    else:
+                        importance = float(importance)
+                    
+                    if not (np.isnan(importance) or np.isinf(importance)):
+                        valid_features[feature] = importance
+                except (ValueError, TypeError) as e:
+                    print(f"⚠️ Skipping invalid feature importance: {feature} = {importance} ({e})")
+                    continue
+            
+            if len(valid_features) == 0:
+                print("⚠️ No valid feature importance values, using simple explanation")
+                return self._generate_simple_explanation(input_data, selected_crop, confidence)
+            
+            # Sort features by absolute importance
+            sorted_features = sorted(valid_features.items(), key=lambda x: abs(x[1]), reverse=True)
+            
+            explanations = []
+            
+            for feature, importance in sorted_features[:5]:  # Top 5 features
+                # Map engineered feature back to original parameter
+                original_param = self._map_feature_to_param(feature)
                 
-                unit = SENSOR_PARAMS.get(original_param, {}).get('unit', '')
-                explanations.append(f"• {original_param.title()}: {value} {unit} - {strength} {impact}")
-        
-        confidence_text = format_confidence_score(confidence)
-        
-        explanation = f"""
+                if original_param in input_data:
+                    value = input_data[original_param]
+                    impact = "mendukung" if importance > 0 else "menghambat"
+                    strength = "sangat" if abs(importance) > 0.1 else "cukup"
+                    
+                    unit = SENSOR_PARAMS.get(original_param, {}).get('unit', '')
+                    explanations.append(f"• {original_param.title()}: {value} {unit} - {strength} {impact}")
+            
+            # Fallback if no valid explanations generated
+            if len(explanations) == 0:
+                print("⚠️ No valid parameter explanations generated, using simple explanation")
+                return self._generate_simple_explanation(input_data, selected_crop, confidence)
+            
+            confidence_text = format_confidence_score(confidence)
+            
+            explanation = f"""
 🧠 **Analisis AI untuk {selected_crop.title()}:**
 
 **Faktor-faktor Utama:**
@@ -188,9 +288,14 @@ class AICropPredictor:
 🎯 **Tingkat Keyakinan:** {confidence_text}
 
 💡 **Rekomendasi:** Model AI mendeteksi tingkat kesesuaian {confidence:.1%} berdasarkan pola dari data training.
-        """
-        
-        return explanation.strip()
+            """
+            
+            return explanation.strip()
+            
+        except Exception as e:
+            print(f"⚠️ Error in SHAP explanation generation: {str(e)}")
+            print(f"   Error type: {type(e).__name__}")
+            return self._generate_simple_explanation(input_data, selected_crop, confidence)
     
     def _map_feature_to_param(self, feature_name: str) -> str:
         """Map engineered feature back to original parameter"""

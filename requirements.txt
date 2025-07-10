@@ -16,3 +16,7 @@ streamlit-folium==0.25.0
 geopy==2.4.1
 pyarrow==19.0.0
 openai>=1.0.0
+sentence-transformers>=2.0.0
+qdrant-client>=1.6.0
+torch>=2.0.0
+transformers>=4.20.0

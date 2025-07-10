@@ -1,44 +1,113 @@
-# 🌾 Agricultural Decision Support System - Local AI Version
+# 🌾 Agricultural Decision Support System
 
-**AI-Powered Crop Recommendations with Local LLM Integration**
+**AI-Powered Crop Recommendations with Advanced LLM Integration**
 
-A complete agricultural decision support system with ML-based crop prediction and local AI environmental optimization using Ollama. Features SHAP explainability for low-confidence predictions and fully localized Indonesian interface.
+A complete agricultural decision support system with ML-based crop prediction and AI environmental optimization using OpenRouter. Features SHAP explainability for low-confidence predictions and fully localized Indonesian interface.
 
 ## ✨ Features
 
 - **🤖 ML Crop Prediction**: Random Forest model analyzes soil nutrients, climate, and pH
-- **🧠 Local AI Optimization**: Personalized strategies using local Ollama + Gemma models
+- **🧠 AI Optimization**: Personalized strategies using OpenRouter + advanced LLM models
 - **🔍 SHAP Explainability**: Understand which factors limit crop suitability
-- **⚡ Single File**: Everything integrated in `agricultural_chatbot.py`
+- **🏗️ Modular Architecture**: Clean, maintainable code structure in `src/` directory
+- **📄 Single File Option**: Complete functionality in `agricultural_chatbot.py`
 - **🇮🇩 Indonesian Interface**: Fully localized UI and prompts
-- **🔒 Privacy-First**: No external API calls - all processing local
 - **📊 Scientific Approach**: Evidence-based advice with confidence scoring
 - **💾 Persistent History**: MongoDB Atlas integration for interaction history storage
+- **🗺️ Location Integration**: GPS, interactive maps, and location search
+- **⚡ Easy Launcher**: Enhanced bash script for simple deployment
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 1. Clone and Setup
 ```bash
-pip install -r requirements.txt
+git clone <repository-url>
+cd agricultural-decision-support
+chmod +x launch.sh
 ```
 
-### 2. Setup Ollama
+### 2. Launch the Application
+**🎉 Super Easy Launch** - Use the enhanced launcher script:
+
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# Interactive menu (recommended for first time)
+./launch.sh
 
-# Start Ollama server
-ollama serve
-
-# Download Gemma model (choose based on your system)
-ollama pull gemma2:9b  # For 16GB+ RAM (recommended)
-# OR
-ollama pull gemma:7b   # For 8-16GB RAM
-# OR  
-ollama pull gemma:2b   # For 4-8GB RAM
+# Or direct launch options:
+./launch.sh --modular     # Launch modular version (recommended)
+./launch.sh --single      # Launch single-file version
+./launch.sh --help        # Show all options
 ```
 
-### 3. MongoDB Configuration (Automatic)
+The launcher will automatically:
+- ✅ Check system requirements
+- 📦 Install dependencies if needed
+- 🔍 Verify data files and environment
+- 🚀 Launch the application
+
+### 3. Optional: OpenRouter API Setup
+For enhanced AI features, create a `.env` file:
+```bash
+# .env (optional)
+OPENROUTER_API_KEY=your-openrouter-api-key-here
+```
+
+**Note**: The app works fully without OpenRouter - it will use fallback options for AI features.
+
+### 4. 🧠 Knowledge Base Setup (Advanced Feature)
+
+**🎯 Enhanced AI with Agricultural Knowledge Base**
+
+The application supports an optional knowledge base feature using Qdrant vector database and SentenceTransformers for more accurate, evidence-based agricultural recommendations.
+
+#### Quick Setup:
+```bash
+# 1. Install Docker (required for Qdrant)
+# Download from: https://docs.docker.com/get-docker/
+
+# 2. Run the automated setup script
+python setup_qdrant.py
+
+# 3. Start the application - knowledge base will be auto-detected
+./launch.sh
+```
+
+#### Manual Setup:
+```bash
+# 1. Start Qdrant server
+docker run -d --name qdrant-agricultural-kb \
+  -p 6333:6333 -p 6334:6334 \
+  -v ./qdrant_data:/qdrant/storage \
+  qdrant/qdrant:latest
+
+# 2. Install additional dependencies
+pip install sentence-transformers qdrant-client torch transformers
+
+# 3. The application will auto-detect Qdrant and enable knowledge base
+```
+
+#### 🌟 Knowledge Base Features:
+- **📚 Semantic Search**: Find relevant agricultural knowledge based on context
+- **🔬 Evidence-Based Recommendations**: AI advice enhanced with research data
+- **🌍 Multilingual Support**: Works with Indonesian and English content
+- **🔄 Automatic Fallback**: Works without knowledge base if not available
+- **⚡ Real-time Integration**: Knowledge base queries integrated into AI recommendations
+
+#### 📊 Knowledge Base Benefits:
+- **More accurate recommendations** based on agricultural research
+- **Context-aware advice** that considers local conditions
+- **Scientific references** to support recommendations
+- **Continuous learning** from agricultural knowledge base
+
+#### 🔧 Adding Custom Knowledge:
+1. Prepare PDF documents with agricultural content
+2. Extract text using PDF processing tools
+3. Upload to Qdrant using the agricultural_chatbot.py interface
+4. Knowledge base will automatically enhance AI recommendations
+
+**Status Display**: The application will show "✅ Knowledge base tersedia" when active, or "⚠️ Knowledge base tidak tersedia" when using fallback mode.
+
+### 5. MongoDB Configuration (Automatic)
 
 **🎉 READY TO USE**: The application comes with a pre-configured MongoDB Atlas database!
 - **Database**: `munawir_datathon2025`  
@@ -58,33 +127,45 @@ MONGODB_COLLECTION=your_collection_name
 2. Replace with your actual MongoDB Atlas credentials
 3. Restart the application
 
-### 4. Verify Setup
-```bash
-python test_ollama.py
-```
+That's it! Your agricultural decision support system with persistent interaction history is ready.
 
-### 5. Run the Application
+### 4. Alternative Manual Launch
+If you prefer to run manually without the launcher:
+
 ```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Launch modular version (recommended)
+streamlit run src/main.py
+
+# OR launch single-file version
 streamlit run agricultural_chatbot.py
 ```
-
-That's it! Your agricultural decision support system with persistent interaction history is ready.
 
 ## 📁 File Structure
 
 ```
 📦 agricultural-decision-support/
-├── 🔥 agricultural_chatbot.py        # ⭐ COMPLETE APPLICATION
-├── 📊 data/                          # ML model files (required)
+├── 🚀 launch.sh                      # ⭐ ENHANCED LAUNCHER SCRIPT
+├── 🔥 agricultural_chatbot.py        # Complete single-file application (with knowledge base)
+├── 🧠 setup_qdrant.py                # Knowledge base setup script
+├── 🏗️ src/                           # Modular application (recommended)
+│   ├── main.py                      # Main entry point
+│   ├── components/                  # UI components
+│   ├── core/                        # ML prediction engine
+│   ├── services/                    # Database, location, mapping
+│   ├── utils/                       # Configuration and helpers
+│   └── data/                        # ML model files
+├── 📊 data/                          # Legacy ML model files
 │   ├── best_model_random_forest.pkl
 │   ├── label_encoder.pkl
 │   ├── scaler.pkl
-│   ├── X_train.csv
-│   └── y_train.csv
-├── 🧪 test_ollama.py                # Ollama integration test
-├── 📋 OLLAMA_SETUP.md               # Detailed Ollama setup guide
-├── 📄 requirements.txt               # Dependencies (no OpenAI!)
-└── 📖 README.md                     # This file
+│   └── training data files...
+├── 📄 requirements.txt               # Python dependencies (incl. knowledge base)
+├── 📖 README.md                     # This documentation
+├── 🔧 TECHNICAL_INTEGRATION_SUMMARY.md # Technical details
+└── 📚 qdrant_data/                   # Knowledge base storage (auto-created)
 ```
 
 ## 💡 How It Works
@@ -124,9 +205,10 @@ Local AI Environmental Recommendations:
 
 ### Integrated Components
 1. **AICropPredictor Class**: Complete ML pipeline with SHAP explainability
-2. **DecisionSupportSystem Class**: Local AI advice generation via Ollama
-3. **Streamlit UI Functions**: Fully localized Indonesian interface
-4. **Ollama Integration**: Local LLM processing with Gemma models
+2. **DecisionSupportSystem Class**: AI advice generation via OpenRouter
+3. **Streamlit UI Functions**: Fully localized Indonesian interface  
+4. **Location Integration**: GPS, interactive maps, and geocoding services
+5. **Database Integration**: MongoDB Atlas for persistent storage
 
 ### ML Model Pipeline
 ```python
@@ -158,60 +240,57 @@ OpenRouter API → Environmental optimization strategies
 Structured recommendations with implementation guidance
 ```
 
-## 🎯 Key Advantages of Local AI Integration
+## 🎯 Key Advantages
 
-### Privacy & Security
-- **No external API calls** - all processing happens locally
-- **Data stays private** - sensor data never leaves your system
-- **No API keys needed** - eliminate security concerns
-- **Offline capable** - works without internet after setup
+### Smart Architecture
+- **Modular design** - clean separation of concerns
+- **Dual deployment options** - modular or single-file versions
+- **Enhanced launcher** - automated setup and dependency management
+- **Location-aware** - GPS and interactive map integration
 
-### Performance & Reliability
-- **No API rate limits** - unlimited usage
-- **Consistent performance** - not dependent on external service status
-- **Lower latency** - no network round trips
-- **Cost effective** - no ongoing API fees
+### Reliability & Performance
+- **Fallback systems** - OpenRouter with local alternatives
+- **Persistent storage** - MongoDB Atlas for interaction history
+- **Error handling** - comprehensive validation and recovery
+- **User experience** - intuitive interface with helpful guidance
 
-### Customization
-- **Model choice** - select Gemma model based on your hardware
-- **Fine-tuning capable** - can adapt models for specific needs
-- **Full control** - modify prompts and behavior as needed
-- **Language optimization** - better Indonesian language support
+### Deployment & Maintenance
+- **Easy setup** - automated launcher handles dependencies
+- **Flexible configuration** - optional API keys and custom settings
+- **Production ready** - robust error handling and logging
+- **Indonesian localization** - full language support
 
 ## 🚀 Usage Examples
 
 ### Basic Usage
 ```bash
-# Start Ollama server
-ollama serve &
+# Quick start with launcher (recommended)
+./launch.sh
 
-# Run the application
-streamlit run agricultural_chatbot.py
-```
-
-### Test Ollama Integration
-```bash
-# Verify everything works
-python test_ollama.py
+# Or launch specific version directly
+./launch.sh --modular     # Recommended: latest modular version
+./launch.sh --single      # Stable: single-file version
 ```
 
 ### Development Mode
-```python
-# Test ML components individually
-python -c "
-from agricultural_chatbot import AICropPredictor
-predictor = AICropPredictor()
-result = predictor.evaluate_crop_suitability(
-    {'N': 50, 'P': 25, 'K': 100, 'temperature': 25, 'humidity': 65, 'ph': 6.5, 'rainfall': 800}, 
-    'rice'
-)
-print(result)
-"
+```bash
+# Manual launch for development
+streamlit run src/main.py    # Modular version
+streamlit run agricultural_chatbot.py  # Single-file version
+
+# Custom port
+streamlit run src/main.py --server.port 8502
 ```
 
 ### Production Deployment
 ```bash
-# Deploy with specific port
+# Production with enhanced launcher
+./launch.sh --modular
+
+# Manual production deployment
+streamlit run src/main.py --server.port 8501 --server.headless true
+
+# Or single-file version
 streamlit run agricultural_chatbot.py --server.port 8501 --server.headless true
 ```
 
@@ -238,19 +317,23 @@ streamlit run agricultural_chatbot.py --server.port 8501 --server.headless true
 
 **"Module not found" errors:**
 ```bash
-pip install streamlit ollama pymongo pandas numpy scikit-learn shap
+# Use the enhanced launcher (recommended)
+./launch.sh
+
+# Or install manually
+pip install -r requirements.txt
 ```
 
-**Ollama connection errors:**
+**Launcher issues:**
 ```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
+# Make sure script is executable
+chmod +x launch.sh
 
-# Start Ollama if not running
-ollama serve
+# Check launcher help
+./launch.sh --help
 
-# Check available models
-ollama list
+# Use manual installation if needed
+pip install -r requirements.txt
 ```
 
 **MongoDB connection issues:**
@@ -273,17 +356,18 @@ ls -la data/
 
 ## 🎉 Success!
 
-You now have a complete agricultural decision support system in a single file!
+You now have a complete agricultural decision support system with enhanced deployment!
 
-- ✅ **One file to rule them all**: `agricultural_chatbot.py`
-- ✅ **Simple setup**: Just install dependencies and add API key
-- ✅ **Full functionality**: ML prediction + AI optimization + Beautiful UI  
-- ✅ **Production ready**: Error handling, lazy loading, user feedback
-- ✅ **Easy to maintain**: Single file, clear structure, well documented
+- ✅ **Enhanced launcher**: `./launch.sh` handles everything automatically
+- ✅ **Dual architecture**: Choose modular or single-file versions
+- ✅ **Smart setup**: Automated dependency installation and verification
+- ✅ **Full functionality**: ML prediction + AI optimization + Location integration + Beautiful UI  
+- ✅ **Production ready**: Error handling, persistent storage, user feedback
+- ✅ **Easy to maintain**: Clean modular structure, well documented
 
 ---
 
 **Ready to revolutionize agriculture with AI? Just run:**
 ```bash
-streamlit run agricultural_chatbot.py
+./launch.sh
 ```

@@ -1,113 +1,191 @@
 #!/bin/bash
 
-# Agricultural Decision Support System - Local AI Launcher
-# Launches the application with Ollama integration
+# Agricultural Decision Support System - Enhanced Launcher
+# Updated for OpenRouter integration and modular architecture
 
-echo "🌾 Starting Agricultural Decision Support System (Local AI Version)..."
-echo "=================================================================="
+echo "🌾 Agricultural Decision Support System Launcher"
+echo "=================================================="
 
-# Check if we're in the right directory
-if [ ! -f "agricultural_chatbot.py" ]; then
-    echo "❌ Error: agricultural_chatbot.py not found in current directory"
-    echo "Please run this from the project directory"
-    exit 1
-fi
+# Function to display usage help
+show_help() {
+    echo ""
+    echo "Usage: ./launch.sh [option]"
+    echo ""
+    echo "Options:"
+    echo "  --modular, -m     Launch modular version (src/main.py)"
+    echo "  --single, -s      Launch single-file version (agricultural_chatbot.py)"
+    echo "  --help, -h        Show this help message"
+    echo ""
+    echo "Default: If no option specified, shows menu to choose version"
+    echo ""
+}
 
-echo "✅ Found agricultural_chatbot.py"
-
-# Check if Python is available
-if ! command -v python &> /dev/null; then
-    echo "❌ Error: Python is not installed or not in PATH"
-    exit 1
-fi
-
-echo "✅ Python is available"
-
-# Check if Streamlit is installed
-if ! python -c "import streamlit" &> /dev/null; then
-    echo "❌ Error: Streamlit is not installed"
-    echo "Please install requirements: pip install -r requirements.txt"
-    exit 1
-fi
-
-echo "✅ Streamlit is installed"
-
-# Check if required data directory exists
-if [ ! -d "data" ]; then
-    echo "⚠️  Warning: data directory not found"
-    echo "ML features will be limited without model files"
-else
-    echo "✅ Data directory found"
-fi
-
-# Check if .env file exists
-if [ ! -f ".env" ]; then
-    echo "⚠️  Warning: .env file not found"
-    echo "AI features will be limited without API key"
-    echo "Create .env file with: OPENROUTER_API_KEY=your-key-here"
-else
-    echo "✅ Environment file found"
-fi
-
-# Check if Ollama is installed
-if ! command -v ollama &> /dev/null; then
-    echo "❌ Error: Ollama is not installed"
-    echo "Please install Ollama: curl -fsSL https://ollama.com/install.sh | sh"
-    exit 1
-fi
-
-echo "✅ Ollama is installed"
-
-# Check if Ollama server is running
-if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "🔄 Ollama server not running, starting it..."
+# Function to check system requirements
+check_requirements() {
+    echo "🔍 Checking system requirements..."
     
-    # Start Ollama server in background
-    ollama serve > /dev/null 2>&1 &
-    OLLAMA_PID=$!
+    # Check if we're in the right directory
+    if [ ! -f "agricultural_chatbot.py" ] && [ ! -f "src/main.py" ]; then
+        echo "❌ Error: Project files not found in current directory"
+        echo "Please run this script from the project root directory"
+        exit 1
+    fi
     
-    # Wait for server to start
-    echo "⏳ Waiting for Ollama server to start..."
-    for i in {1..30}; do
-        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            echo "✅ Ollama server is running"
-            break
+    # Check Python installation
+    if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+        echo "❌ Error: Python is not installed or not in PATH"
+        echo "Please install Python 3.8+ from https://python.org"
+        exit 1
+    fi
+    
+    # Determine Python command
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+    else
+        PYTHON_CMD="python"
+    fi
+    
+    echo "✅ Python found: $($PYTHON_CMD --version)"
+    
+    # Check pip installation
+    if ! $PYTHON_CMD -m pip --version &> /dev/null; then
+        echo "❌ Error: pip is not available"
+        echo "Please install pip or use a Python environment with pip"
+        exit 1
+    fi
+    
+    echo "✅ pip is available"
+    
+    # Check and install requirements
+    if [ -f "requirements.txt" ]; then
+        echo "📦 Checking Python dependencies..."
+        
+        # Check if Streamlit is installed
+        if ! $PYTHON_CMD -c "import streamlit" &> /dev/null; then
+            echo "⚠️  Streamlit not found. Installing requirements..."
+            $PYTHON_CMD -m pip install -r requirements.txt
+            
+            if [ $? -ne 0 ]; then
+                echo "❌ Failed to install requirements"
+                echo "Try manually: $PYTHON_CMD -m pip install -r requirements.txt"
+                exit 1
+            fi
         fi
-        sleep 1
-        echo -n "."
-    done
+        
+        echo "✅ Dependencies are ready"
+    else
+        echo "⚠️  Warning: requirements.txt not found"
+    fi
     
-    if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "❌ Failed to start Ollama server"
-        exit 1
+    # Check data directory
+    if [ -d "data" ] || [ -d "src/data" ]; then
+        echo "✅ Model data directory found"
+    else
+        echo "⚠️  Warning: Model data directory not found"
+        echo "   Some ML features may be limited"
     fi
-else
-    echo "✅ Ollama server is already running"
-fi
-
-# Check for Gemma models
-echo "🔍 Checking for Gemma models..."
-if ! ollama list | grep -q gemma; then
-    echo "⚠️  No Gemma models found"
-    echo "Please install a Gemma model:"
-    echo "  For 16GB+ RAM: ollama pull gemma2:9b"
-    echo "  For 8-16GB RAM: ollama pull gemma:7b" 
-    echo "  For 4-8GB RAM: ollama pull gemma:2b"
-    read -p "Continue without Gemma model? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    
+    # Check environment file
+    if [ -f ".env" ]; then
+        echo "✅ Environment configuration found"
+    else
+        echo "⚠️  Info: No .env file found"
+        echo "   App will use default MongoDB. For custom config:"
+        echo "   Create .env with: OPENROUTER_API_KEY=your-key-here"
     fi
-else
-    GEMMA_MODEL=$(ollama list | grep gemma | head -1 | awk '{print $1}')
-    echo "✅ Found Gemma model: $GEMMA_MODEL"
-fi
+}
 
-echo ""
-echo "🚀 Launching Agricultural Decision Support System..."
-echo "📱 Access the app at: http://localhost:8501"
-echo "🛑 Press Ctrl+C to stop the application"
-echo ""
+# Function to launch modular version
+launch_modular() {
+    echo ""
+    echo "🚀 Launching Modular Version (src/main.py)..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📱 App will open at: http://localhost:8501"
+    echo "🛑 Press Ctrl+C to stop the application"
+    echo ""
+    
+    # Launch the modular application
+    exec $PYTHON_CMD -m streamlit run src/main.py
+}
 
-# Start the application
-exec streamlit run agricultural_chatbot.py
+# Function to launch single-file version
+launch_single() {
+    echo ""
+    echo "🚀 Launching Single-File Version (agricultural_chatbot.py)..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📱 App will open at: http://localhost:8501"
+    echo "🛑 Press Ctrl+C to stop the application"
+    echo ""
+    
+    # Launch the single-file application
+    exec $PYTHON_CMD -m streamlit run agricultural_chatbot.py
+}
+
+# Function to show version selection menu
+show_menu() {
+    echo ""
+    echo "📋 Select Application Version:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "1) 🏗️  Modular Version (Recommended)"
+    echo "   └─ File: src/main.py"
+    echo "   └─ Features: Latest updates, better organization"
+    echo ""
+    echo "2) 📄 Single-File Version (Complete)"
+    echo "   └─ File: agricultural_chatbot.py"
+    echo "   └─ Features: All-in-one file, stable"
+    echo ""
+    echo "3) ❌ Exit"
+    echo ""
+    
+    while true; do
+        read -p "Choose option (1-3): " choice
+        case $choice in
+            1)
+                launch_modular
+                break
+                ;;
+            2)
+                launch_single
+                break
+                ;;
+            3)
+                echo "👋 Goodbye!"
+                exit 0
+                ;;
+            *)
+                echo "❌ Invalid option. Please choose 1, 2, or 3."
+                ;;
+        esac
+    done
+}
+
+# Main script logic
+main() {
+    # Parse command line arguments
+    case "${1:-}" in
+        --modular|-m)
+            check_requirements
+            launch_modular
+            ;;
+        --single|-s)
+            check_requirements
+            launch_single
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        "")
+            check_requirements
+            show_menu
+            ;;
+        *)
+            echo "❌ Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function with all arguments
+main "$@"

@@ -174,87 +174,172 @@ def display_interaction_history():
 
 
 def display_new_interaction_form():
-    """Display form for creating new interaction in sidebar - matches original implementation"""
+    """Display form for creating new interaction in sidebar - Enhanced with better integration"""
     with st.sidebar:
         st.markdown("### ➕ New Interaction")
         
-        with st.form("sidebar_new_interaction", clear_on_submit=False):
-            st.markdown("**Quick Setup**")
+        # Show current preset status if loaded
+        if st.session_state.preset_data:
+            preset_name = st.session_state.preset_name or "Custom"
+            st.success(f"✅ **{preset_name}** loaded in main form")
+            st.markdown("📍 **Next:** Select location, then submit main form")
             
-            # Quick presets
-            preset = st.selectbox("📋 Preset", [
-                "Custom", "Rice - Tropis", "Maize - Musim Kering", 
-                "Cotton - Komersial", "Banana - Lembab"
+            if st.button("🗑️ Clear Preset", type="secondary", help="Clear loaded preset from main form"):
+                st.session_state.preset_data = None
+                st.session_state.preset_name = None
+                st.success("✅ Preset cleared from main form")
+                st.rerun()
+        
+        with st.form("sidebar_new_interaction", clear_on_submit=False):
+            st.markdown("**🚀 Quick Setup**")
+            
+            # Quick presets with better descriptions
+            preset = st.selectbox("📋 Choose Preset", [
+                "Custom Manual Input",
+                "🌾 Rice - Tropical Climate", 
+                "🌽 Maize - Dry Season", 
+                "🏭 Cotton - Commercial", 
+                "🍌 Banana - Humid Region"
             ])
             
-            # Show preset info
-            if preset != "Custom":
-                if preset == "Rice - Tropis":
-                    st.info("🌾 Padi untuk iklim tropis dengan kelembaban tinggi")
-                elif preset == "Maize - Musim Kering":
-                    st.info("🌽 Jagung untuk musim kemarau dengan curah hujan sedang")
-                elif preset == "Cotton - Komersial":
-                    st.info("🏭 Kapas komersial dengan nutrisi tinggi")
-                elif preset == "Banana - Lembab":
-                    st.info("🍌 Pisang untuk daerah lembab")
+            # Enhanced preset info with location details
+            if preset != "Custom Manual Input":
+                if "Rice" in preset:
+                    st.info("🌾 **Rice for tropical climate**\n"
+                           "• High humidity (80%)\n"
+                           "• Moderate nutrients\n"
+                           "• High rainfall (280mm)\n"
+                           "• Suggested location: Jawa Barat")
+                elif "Maize" in preset:
+                    st.info("🌽 **Maize for dry season**\n"
+                           "• Lower humidity (55%)\n"
+                           "• Balanced nutrients\n"
+                           "• Moderate rainfall (120mm)\n"
+                           "• Suggested location: Jawa Tengah")
+                elif "Cotton" in preset:
+                    st.info("🏭 **Commercial cotton farming**\n"
+                           "• Low humidity (45%)\n"
+                           "• High nutrients\n"
+                           "• Low rainfall (80mm)\n"
+                           "• Suggested location: Sulawesi")
+                elif "Banana" in preset:
+                    st.info("🍌 **Banana for humid regions**\n"
+                           "• Very high humidity (85%)\n"
+                           "• Balanced nutrients\n"
+                           "• High rainfall (250mm)\n"
+                           "• Suggested location: Kalimantan")
+            else:
+                st.info("✏️ **Custom input**\n"
+                       "Choose your own values using the main form")
             
-            # Submit button (always visible - fixed unconditional)
-            submitted = st.form_submit_button("📝 Use Main Form", type="primary" if preset != "Custom" else "secondary")
+            # Enhanced submit button
+            if preset != "Custom Manual Input":
+                submitted = st.form_submit_button("📋 Load to Main Form", type="primary")
+                submit_label = "Load Preset"
+            else:
+                submitted = st.form_submit_button("➡️ Use Main Form", type="secondary") 
+                submit_label = "Switch to Manual"
             
-            # Handle submission
+            # Handle submission with better feedback
             if submitted:
-                if preset != "Custom":
-                    # Define preset data (don't save as interaction yet)
+                if preset != "Custom Manual Input":
+                    # Fixed data mapping - use consistent naming with main form
                     preset_data = {}
-                    if preset == "Rice - Tropis":
+                    if "Rice" in preset:
                         preset_data = {
-                            'N': 80, 'P': 40, 'K': 40, 'temperature': 26,
-                            'humidity': 80, 'ph': 6.0, 'rainfall': 280,  # Fixed: within max 298.6
-                            'field_size': 2.0, 'selected_crop': 'rice', 'location': 'Jawa Barat'
+                            'nitrogen': 80, 'phosphorus': 40, 'potassium': 40, 
+                            'temperature': 26, 'humidity': 80, 'ph': 6.0, 
+                            'rainfall': 280, 'land_area': 2.0, 
+                            'selected_crop': 'rice',
+                            'suggested_location': 'Jawa Barat, Indonesia',
+                            'location_coordinates': {'lat': -6.2088, 'lng': 106.8456}  # Jakarta area
                         }
-                    elif preset == "Maize - Musim Kering":
+                    elif "Maize" in preset:
                         preset_data = {
-                            'N': 90, 'P': 50, 'K': 30, 'temperature': 28,
-                            'humidity': 55, 'ph': 6.8, 'rainfall': 120,  # Fixed: within max 298.6 
-                            'field_size': 3.0, 'selected_crop': 'maize', 'location': 'Jawa Tengah'
+                            'nitrogen': 90, 'phosphorus': 50, 'potassium': 30,
+                            'temperature': 28, 'humidity': 55, 'ph': 6.8,
+                            'rainfall': 120, 'land_area': 3.0,
+                            'selected_crop': 'maize',
+                            'suggested_location': 'Jawa Tengah, Indonesia',
+                            'location_coordinates': {'lat': -7.2504, 'lng': 110.1755}  # Semarang area
                         }
-                    elif preset == "Cotton - Komersial":
+                    elif "Cotton" in preset:
                         preset_data = {
-                            'N': 120, 'P': 70, 'K': 150, 'temperature': 30,
-                            'humidity': 45, 'ph': 7.2, 'rainfall': 80,   # Fixed: within max 298.6
-                            'field_size': 5.0, 'selected_crop': 'cotton', 'location': 'Sulawesi'
+                            'nitrogen': 120, 'phosphorus': 70, 'potassium': 150,
+                            'temperature': 30, 'humidity': 45, 'ph': 7.2,
+                            'rainfall': 80, 'land_area': 5.0,
+                            'selected_crop': 'cotton',
+                            'suggested_location': 'Sulawesi Selatan, Indonesia',
+                            'location_coordinates': {'lat': -5.1477, 'lng': 119.4327}  # Makassar area
                         }
-                    elif preset == "Pisang - Lembab":
+                    elif "Banana" in preset:
                         preset_data = {
-                            'N': 100, 'P': 60, 'K': 180, 'temperature': 27,
-                            'humidity': 85, 'ph': 6.0, 'rainfall': 250,  # Fixed: within max 298.6
-                            'field_size': 1.5, 'selected_crop': 'banana', 'location': 'Kalimantan'
+                            'nitrogen': 100, 'phosphorus': 60, 'potassium': 180,
+                            'temperature': 27, 'humidity': 85, 'ph': 6.0,
+                            'rainfall': 250, 'land_area': 1.5,
+                            'selected_crop': 'banana',
+                            'suggested_location': 'Kalimantan Timur, Indonesia',
+                            'location_coordinates': {'lat': -0.5017, 'lng': 117.1536}  # Samarinda area
                         }
                     
-                    # Store preset data in session state for main form to use
+                    # Store preset data in session state for main form
                     st.session_state.preset_data = preset_data
-                    st.session_state.preset_name = preset
+                    st.session_state.preset_name = preset.replace("🌾 ", "").replace("🌽 ", "").replace("🏭 ", "").replace("🍌 ", "")
                     st.session_state.current_interaction_id = None  # Clear any loaded interaction
-                    st.session_state.sidebar_mode = 'history'
-                    st.success(f"✅ {preset} loaded to main form! Please review and edit parameters, then submit.")
+                    
+                    # Don't switch to history mode - stay in new mode for better UX
+                    st.success(f"✅ **{preset.split(' - ')[0]}** loaded!")
+                    st.info("📍 **Next Steps:**\n"
+                           "1. Select location (or use suggested location)\n"
+                           "2. Review/edit parameters in main form\n"
+                           "3. Submit for analysis")
                     st.rerun()
                 else:
-                    # Custom - just clear current interaction and switch to main form
-                    st.session_state.sidebar_mode = 'history'
-                    st.session_state.current_interaction_id = None
+                    # Custom - clear preset and give instructions
                     st.session_state.preset_data = None
                     st.session_state.preset_name = None
-                    st.info("💡 Use the main form to create a custom interaction")
+                    st.session_state.current_interaction_id = None
+                    st.info("💡 **Custom Mode Activated**\n"
+                           "Use the main form to create your custom analysis")
                     st.rerun()
         
-        # Management tools
+        # Quick Actions Section
+        st.markdown("---")
+        st.markdown("**🔧 Quick Actions**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🎯 Auto-Fill", type="secondary", help="Auto-fill with optimal values"):
+                # Auto-fill with optimal balanced values
+                optimal_data = {
+                    'nitrogen': 75, 'phosphorus': 55, 'potassium': 65,
+                    'temperature': 26, 'humidity': 70, 'ph': 6.5,
+                    'rainfall': 150, 'land_area': 2.0,
+                    'selected_crop': 'rice',  # Default to rice
+                    'suggested_location': 'Indonesia (Central Java)',
+                }
+                st.session_state.preset_data = optimal_data
+                st.session_state.preset_name = "Auto-Optimal"
+                st.success("✅ **Auto-Optimal** values loaded!")
+                st.rerun()
+        
+        with col2:
+            if st.button("📍 Suggest Location", type="secondary", help="Get location suggestions"):
+                st.info("🗺️ **Location Suggestions:**\n"
+                       "• **Rice:** Jawa Barat/Tengah\n"
+                       "• **Maize:** Jawa Timur, Lampung\n"
+                       "• **Cotton:** Sulawesi, Sumatra\n"
+                       "• **Fruits:** Kalimantan, Papua")
+        
+        # Management tools (existing)
         if len(st.session_state.interaction_history) > 0:
             st.markdown("---")
             st.markdown("**🛠️ Management**")
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🗑️ Clear", type="secondary", help="Clear all saved interactions"):
+                if st.button("🗑️ Clear All", type="secondary", help="Clear all saved interactions"):
                     # Import here to avoid circular imports
                     from src.services.database import get_mongodb_manager
                     

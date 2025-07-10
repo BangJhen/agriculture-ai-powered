@@ -50,25 +50,25 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # Temporary workaround - disable sentence transformers to fix PyTorch import error
-# try:
-#     from sentence_transformers import SentenceTransformer
-#     from qdrant_client import QdrantClient
-#     from qdrant_client.http import models
+try:
+    from sentence_transformers import SentenceTransformer
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models
     
-#     modelembed = SentenceTransformer("all-MiniLM-L6-v2")
-#     client = QdrantClient(url="http://localhost:6333")
-#     SENTENCE_TRANSFORMERS_AVAILABLE = True
-#     print("✅ SentenceTransformers loaded successfully")
-# except ImportError as e:
-#     print(f"⚠️ SentenceTransformers/Qdrant not available: {e}")
-#     print("📌 Program akan berjalan tanpa fitur knowledge base")
-#     SENTENCE_TRANSFORMERS_AVAILABLE = False
-#     modelembed = None
-#     client = None
+    modelembed = SentenceTransformer("all-MiniLM-L6-v2")
+    client = QdrantClient(url="http://localhost:6333")
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+    print("✅ SentenceTransformers loaded successfully")
+except ImportError as e:
+    print(f"⚠️ SentenceTransformers/Qdrant not available: {e}")
+    print("📌 Program akan berjalan tanpa fitur knowledge base")
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    modelembed = None
+    client = None
 
-SENTENCE_TRANSFORMERS_AVAILABLE = False
-modelembed = None
-client = None
+# SENTENCE_TRANSFORMERS_AVAILABLE = False
+# modelembed = None
+# client = None
 
 # Suppress warnings first
 warnings.filterwarnings('ignore')
@@ -1605,26 +1605,72 @@ def call_ollama_llm(model_name: str, prompt: str, system_prompt: str = None, tem
     result = response.json()
     return result.get("response", "")
 
-def create_query(SC, MLC) :
+def create_query(SC, MLC):
         """Create a query for the knowledge base"""
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             return ""
         
-        prompt = f"Sekarang saya memiliki db knowledge base yang berisi informasi tentang pertanian di Indonesia. Saya ingin mencari informasi terkait dengan pertanian, tanaman, dan lingkungan. Berikut adalah pertanyaan saya:\n\n{SC}\n\nSaya juga ingin mempertimbangkan hasil evaluasi ML berikut:\n\n{MLC}\n\n berikan saya query ke qdrant yang relevan untuk menapatkan informasi yang relevan dalam bahasa inggris."
-        
+        # Extract key terms for knowledge base search
         try:
-            response =  client.chat.completions.create(
-                    model="anthropic/claude-3.5-sonnet",
-                    messages=[
-                        {"role": "system", "content": "You are an expert Indonesian agricultural advisor focused on environmental optimization and sustainable farming practices."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=2000
+            # Simple but effective fallback query creation
+            query_terms = []
+            
+            # Extract key agricultural terms from sensor context
+            if "Nitrogen" in SC or "nitrogen" in SC:
+                query_terms.append("nitrogen nutrisi tanaman")
+            if "Fosfor" in SC or "fosfor" in SC or "Phosphorus" in SC:
+                query_terms.append("fosfor pembungaan akar")
+            if "Kalium" in SC or "kalium" in SC or "Potassium" in SC:
+                query_terms.append("kalium kualitas buah resistensi")
+            if "Kelembaban" in SC or "kelembaban" in SC or "humidity" in SC:
+                query_terms.append("kelembaban optimal pertumbuhan")
+            if "pH" in SC or "ph" in SC:
+                query_terms.append("pH tanah asam basa")
+            if "Curah hujan" in SC or "rainfall" in SC:
+                query_terms.append("curah hujan irigasi air")
+            if "Suhu" in SC or "temperature" in SC:
+                query_terms.append("suhu optimal pertumbuhan")
+                
+            # Extract crop information from ML context
+            if "Padi" in MLC or "Rice" in MLC:
+                query_terms.append("tanaman padi nutrisi air")
+            elif "Jagung" in MLC or "Corn" in MLC or "Maize" in MLC:
+                query_terms.append("tanaman jagung nitrogen")
+            elif "Tomat" in MLC or "Tomato" in MLC:
+                query_terms.append("tanaman tomat kalium pH")
+            elif "Kedelai" in MLC or "Soybean" in MLC:
+                query_terms.append("tanaman kedelai leguminosa nitrogen")
+            
+            # Create comprehensive query
+            if query_terms:
+                base_query = " ".join(query_terms[:3])  # Limit to top 3 terms
+            else:
+                # Generic fallback
+                base_query = "optimalisasi nutrisi tanaman pertanian Indonesia"
+                
+            # Try OpenRouter for enhanced query (with fallback)
+            enhanced_prompt = f"Berdasarkan kondisi: {SC[:200]} dan evaluasi: {MLC[:200]}, berikan kata kunci pencarian untuk knowledge base pertanian dalam bahasa Indonesia."
+            
+            try:
+                enhanced_response = call_openrouter_llm(
+                    model_name="mistralai/mistral-tiny",
+                    prompt=enhanced_prompt,
+                    system_prompt="You are an agricultural expert. Return only relevant Indonesian keywords for knowledge base search.",
+                    temperature=0.3,
+                    max_tokens=100
                 )
-            return response.choices[0].message.content.strip()
-        except:
-            return ""
+                if enhanced_response and len(enhanced_response.strip()) > 10:
+                    return enhanced_response.strip()[:150]
+            except Exception as e:
+                print(f"⚠️ OpenRouter query enhancement failed: {e}")
+                
+            # Return base query as fallback
+            return base_query[:150]
+            
+        except Exception as e:
+            print(f"⚠️ Error creating knowledge base query: {e}")
+            # Ultimate fallback
+            return "optimalisasi nutrisi tanaman pertanian Indonesia"
 
 def query_knowledge_base(query_text, top_k=3):
         if not SENTENCE_TRANSFORMERS_AVAILABLE or modelembed is None or client is None:
@@ -1634,7 +1680,7 @@ def query_knowledge_base(query_text, top_k=3):
             # Buat embedding dari query
             embeddings = modelembed.encode(query_text)
             # Query ke Qdrant
-            results = client.qdrant_client.search(
+            results = client.search(
                 collection_name="pdf_knowledge",
                 query_vector=embeddings,
                 limit=top_k
@@ -1650,10 +1696,17 @@ def call_openrouter_llm(model_name: str, prompt: str, system_prompt: str = None,
     """Call OpenRouter LLM with the specified model using OpenAI client"""
     try:
         from openai import OpenAI
+        import os
+        
+        # Get API key from environment or use fallback
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            # Use hardcoded API key provided by user
+            api_key = "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"
         
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key=api_key,
         )
         
         # Prepare messages
@@ -1685,8 +1738,16 @@ def call_openrouter_llm(model_name: str, prompt: str, system_prompt: str = None,
 
 def call_openrouter_llm_fallback(model_name: str, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000):
     """Fallback OpenRouter LLM call using requests if OpenAI package is not available"""
+    import os
+    
+    # Get API key from environment or use fallback
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        # Use hardcoded API key provided by user
+        api_key = "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"
+    
     headers = {
-        "Authorization": "Bearer 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",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://agricultural-chatbot.streamlit.app",
         "X-Title": "Agricultural Decision Support System"
@@ -1852,16 +1913,22 @@ class DecisionSupportSystem:
                 **Evaluasi Tanaman Berbasis ML:**
                 - Hasil: {str(ml_evaluation)}
                 """
-        query_text = create_query(ml_context, sensor_context)
+        # Query knowledge base untuk konteks tambahan
+        query_text = create_query(sensor_context, ml_context)
         knowledge_chunks = query_knowledge_base(query_text, top_k=3)
         
         # Generate knowledge context with fallback
         if knowledge_chunks and SENTENCE_TRANSFORMERS_AVAILABLE:
-            knowledge_context = "\n\n".join([f"Referensi {i+1}: {chunk}" for i, chunk in enumerate(knowledge_chunks) if chunk])
-            knowledge_status = "✅ Knowledge base available"
+            knowledge_context = "\n\n**📚 Referensi Knowledge Base:**\n"
+            for i, chunk in enumerate(knowledge_chunks):
+                if chunk.strip():  # Only add non-empty chunks
+                    knowledge_context += f"\n**Referensi {i+1}:** {chunk[:500]}...\n"
+            knowledge_status = "✅ Knowledge base tersedia"
+            print(f"✅ Knowledge base query successful: {len(knowledge_chunks)} chunks retrieved")
         else:
             knowledge_context = ""
             knowledge_status = "⚠️ Knowledge base tidak tersedia - menggunakan AI general knowledge"
+            print(f"⚠️ Knowledge base query failed or empty results")
 
         # Enhanced prompt with technical research insights
         technical_context = """
@@ -1906,90 +1973,94 @@ class DecisionSupportSystem:
         - Penghematan air: 20-30% melalui crop-climate matching optimal
         """
         
-        # prompt = f"""
-        # Anda adalah penasihat pertanian Indonesia yang ahli, didukung oleh penelitian machine learning terdepan dengan akurasi 99.5%.
+        prompt = f"""
+        Anda adalah penasihat pertanian Indonesia yang ahli, didukung oleh penelitian machine learning terdepan dengan akurasi 99.5% dan knowledge base pertanian Indonesia.
         
-        #{knowledge_context}
-        # {sensor_context}
-        # {ml_context}
+        **Status Knowledge Base:** {knowledge_status}
         
-        # Berikan rekomendasi optimalisasi lingkungan yang komprehensif dalam bahasa Indonesia untuk petani Indonesia, berdasarkan penelitian machine learning dengan 99.5% akurasi dan analisis 2,200 sampel pertanian. Pertimbangkan:
+        {knowledge_context}
+        
+        {sensor_context}
+        
+        {ml_context}
+        
+                 Berikan rekomendasi optimalisasi lingkungan yang komprehensif dalam bahasa Indonesia untuk petani Indonesia, berdasarkan penelitian machine learning dengan 99.5% akurasi dan analisis 2,200 sampel pertanian. Pertimbangkan:
 
-        # **Prioritas Berdasarkan Penelitian (Evidence-Based):**
-        # 1. **KELEMBABAN** (faktor paling penting - skor 0.7886): Monitoring dan kontrol kelembaban adalah prioritas utama
-        # 2. **KALIUM** (skor 0.6825): Lebih penting dari N dan P untuk kebanyakan tanaman
-        # 3. **CURAH HUJAN** (skor 0.6152): Sumber air utama, perlu optimalisasi dengan kelembaban
-        # 4. **FOSFOR** (skor 0.5791): Kritial untuk fase reproduktif tanaman
-        # 5. **Efisiensi Air** (rasio curah hujan:kelembaban): Indikator kunci untuk tanaman buah
+        **Prioritas Berdasarkan Penelitian (Evidence-Based):**
+        1. **KELEMBABAN** (faktor paling penting - skor 0.7886): Monitoring dan kontrol kelembaban adalah prioritas utama
+        2. **KALIUM** (skor 0.6825): Lebih penting dari N dan P untuk kebanyakan tanaman
+        3. **CURAH HUJAN** (skor 0.6152): Sumber air utama, perlu optimalisasi dengan kelembaban
+        4. **FOSFOR** (skor 0.5791): Kritikal untuk fase reproduktif tanaman
+        5. **Efisiensi Air** (rasio curah hujan:kelembaban): Indikator kunci untuk tanaman buah
         
-        # **Tingkat Error Berdasarkan Kategori (untuk Pencegahan):**
-        # - Serealia (padi, jagung): 0.5% error rate - sangat robust
-        # - Legum (kacang-kacangan): 1.2% error rate - ada inter-legume confusion
-        # - Buah-buahan: 2.1% error rate - kompleksitas tertinggi
-        # - Tanaman komersial: 0.8% error rate - kebutuhan yang distinktif
+        **Tingkat Error Berdasarkan Kategori (untuk Pencegahan):**
+        - Serealia (padi, jagung): 0.5% error rate - sangat robust
+        - Legum (kacang-kacangan): 1.2% error rate - ada inter-legume confusion
+        - Buah-buahan: 2.1% error rate - kompleksitas tertinggi
+        - Tanaman komersial: 0.8% error rate - kebutuhan yang distinktif
         
-        # **Kondisi Spesifik Indonesia:**
-        # - Iklim tropis dengan kelembaban tinggi (rata-rata 71.48%)
-        # - Variasi curah hujan ekstrem (20-298mm dalam dataset)
-        # - Tantangan musim hujan/kemarau
-        # - Ketersediaan sumber daya lokal
+        **Kondisi Spesifik Indonesia:**
+        - Iklim tropis dengan kelembaban tinggi (rata-rata 71.48%)
+        - Variasi curah hujan ekstrem (20-298mm dalam dataset)
+        - Tantangan musim hujan/kemarau
+        - Ketersediaan sumber daya lokal
         
-        # **PRIORITASKAN** rekomendasi berdasarkan hierarchy kepentingan fitur dan faktor pembatas yang diidentifikasi ML.
+                 **PRIORITASKAN** rekomendasi berdasarkan hierarchy kepentingan fitur dan faktor pembatas yang diidentifikasi ML.
         
-        # Strukturkan rekomendasi sebagai berikut:
+        Strukturkan rekomendasi sebagai berikut:
         
-        # ## 🎯 Fokus Utama (Berdasarkan Penelitian ML 99.5% Akurasi)
-        # - **KELEMBABAN (Prioritas #1)**: Kontrol kelembaban adalah faktor paling kritis (skor 0.7886)
-        # - **KALIUM (Prioritas #2)**: Optimalisasi K lebih penting dari N/P (skor 0.6825) 
-        # - **MANAJEMEN AIR (Prioritas #3)**: Curah hujan dan efisiensi air sangat penting (skor 0.6152)
-        # - Prioritaskan perbaikan berdasarkan hierarchy penelitian: Kelembaban → K → Curah Hujan → P → N
-        # - Jelaskan mengapa faktor-faktor ini kritikal berdasarkan temuan ilmiah
+        ## 🎯 Fokus Utama (Berdasarkan Penelitian ML 99.5% Akurasi)
+        - **KELEMBABAN (Prioritas #1)**: Kontrol kelembaban adalah faktor paling kritis (skor 0.7886)
+        - **KALIUM (Prioritas #2)**: Optimalisasi K lebih penting dari N/P (skor 0.6825) 
+        - **MANAJEMEN AIR (Prioritas #3)**: Curah hujan dan efisiensi air sangat penting (skor 0.6152)
+        - Prioritaskan perbaikan berdasarkan hierarchy penelitian: Kelembaban → K → Curah Hujan → P → N
+        - Jelaskan mengapa faktor-faktor ini kritikal berdasarkan temuan ilmiah
         
-        # ## 🌱 Optimalisasi Kesehatan Tanah (Berdasarkan Hierarki K>P>N)
-        # - **KALIUM FIRST**: Fokus utama pada kalium (resistensi penyakit, kualitas buah) - prioritas tertinggi
-        # - **FOSFOR SECOND**: Perkembangan akar dan pembungaan - prioritas kedua  
-        # - **NITROGEN THIRD**: Pertumbuhan vegetatif - prioritas ketiga
-        # - Strategi pH berdasarkan interaksi dengan NPK dan kondisi tropis
-        # - Kompos dan bahan organik untuk mendukung keseimbangan nutrisi optimal
-        # - **Atasi kekurangan berdasarkan urutan K→P→N** sesuai penelitian
+        ## 🌱 Optimalisasi Kesehatan Tanah (Berdasarkan Hierarki K>P>N)
+        - **KALIUM FIRST**: Fokus utama pada kalium (resistensi penyakit, kualitas buah) - prioritas tertinggi
+        - **FOSFOR SECOND**: Perkembangan akar dan pembungaan - prioritas kedua  
+        - **NITROGEN THIRD**: Pertumbuhan vegetatif - prioritas ketiga
+        - Strategi pH berdasarkan interaksi dengan NPK dan kondisi tropis
+        - Kompos dan bahan organik untuk mendukung keseimbangan nutrisi optimal
+        - **Atasi kekurangan berdasarkan urutan K→P→N** sesuai penelitian
         
-        # ## 💧 Manajemen Air (Faktor Kritis #1 dan #3)
-        # - **KELEMBABAN CONTROL**: Prioritas utama - monitoring dan pengaturan kelembaban (faktor terpenting)
-        # - **RASIO OPTIMUM**: Target rasio curah hujan:kelembaban 1.5-2.5 untuk tanaman buah
-        # - Strategi irigasi berdasarkan target kelembaban spesifik tanaman
-        # - Drainase untuk mencegah kelembaban berlebih (>80%) pada tanaman sensitif
-        # - **Efisiensi air** sebagai indikator kunci performa tanaman
+        ## 💧 Manajemen Air (Faktor Kritis #1 dan #3)
+        - **KELEMBABAN CONTROL**: Prioritas utama - monitoring dan pengaturan kelembaban (faktor terpenting)
+        - **RASIO OPTIMUM**: Target rasio curah hujan:kelembaban 1.5-2.5 untuk tanaman buah
+        - Strategi irigasi berdasarkan target kelembaban spesifik tanaman
+        - Drainase untuk mencegah kelembaban berlebih (>80%) pada tanaman sensitif
+        - **Efisiensi air** sebagai indikator kunci performa tanaman
         
-        # ## 🌡️ Adaptasi Iklim (Interaksi Suhu-Kelembaban)
-        # - **CLIMATE STRESS INDEX**: Monitoring interaksi suhu-kelembaban sebagai indikator stress
-        # - Strategi cooling untuk mengurangi stress heat kombinasi suhu-kelembaban tinggi
-        # - Manajemen microclimate berdasarkan kebutuhan kelembaban spesifik
-        # - Preparasi musiman dengan fokus pada kontrol kelembaban
-        # - **Kelembaban sebagai driver utama** adaptasi iklim
+        ## 🌡️ Adaptasi Iklim (Interaksi Suhu-Kelembaban)
+        - **CLIMATE STRESS INDEX**: Monitoring interaksi suhu-kelembaban sebagai indikator stress
+        - Strategi cooling untuk mengurangi stress heat kombinasi suhu-kelembaban tinggi
+        - Manajemen microclimate berdasarkan kebutuhan kelembaban spesifik
+        - Preparasi musiman dengan fokus pada kontrol kelembaban
+        - **Kelembaban sebagai driver utama** adaptasi iklim
         
-        # ## 🔧 Panduan Implementasi (Evidence-Based Priority)
-        # - **IMMEDIATE (0-2 minggu)**: Setup monitoring kelembaban dan optimalisasi kalium
-        # - **SHORT-TERM (1-3 bulan)**: Sistem manajemen air dan balans nutrisi K>P>N  
-        # - **LONG-TERM (musim)**: Optimalisasi rasio curah hujan:kelembaban dan microclimate
-        # - Budget allocation: 40% kelembaban, 25% nutrisi (prioritas K), 20% irigasi, 15% lainnya
-        # - **KPI monitoring**: Kelembaban harian, level K tanah, rasio air-kelembaban
+        ## 🔧 Panduan Implementasi (Evidence-Based Priority)
+        - **IMMEDIATE (0-2 minggu)**: Setup monitoring kelembaban dan optimalisasi kalium
+        - **SHORT-TERM (1-3 bulan)**: Sistem manajemen air dan balans nutrisi K>P>N  
+        - **LONG-TERM (musim)**: Optimalisasi rasio curah hujan:kelembaban dan microclimate
+        - Budget allocation: 40% kelembaban, 25% nutrisi (prioritas K), 20% irigasi, 15% lainnya
+        - **KPI monitoring**: Kelembaban harian, level K tanah, rasio air-kelembaban
         
-        # **Target Quantitatif Berdasarkan Penelitian:**
-        # - Kelembaban optimal: Sesuaikan dengan threshold per crop category (80%+ untuk padi, 40-60% untuk cotton)
-        # - Rasio rainfall:humidity target: 1.5-2.5 untuk buah-buahan
-        # - K threshold: >100 kg/ha untuk cash crops, disesuaikan untuk kategori lain
-        # - Expected improvement: 15-25% yield increase dengan 99.5% confidence
+        **Target Quantitatif Berdasarkan Penelitian:**
+        - Kelembaban optimal: Sesuaikan dengan threshold per crop category (80%+ untuk padi, 40-60% untuk cotton)
+        - Rasio rainfall:humidity target: 1.5-2.5 untuk buah-buahan
+        - K threshold: >100 kg/ha untuk cash crops, disesuaikan untuk kategori lain
+        - Expected improvement: 15-25% yield increase dengan 99.5% confidence
         
-        # ## 🌾 Rekomendasi Khusus Indonesia
-        # - Tanaman pendamping yang cocok untuk iklim Indonesia
-        # - Teknik pertanian organik yang tepat
-        # - Pemanfaatan pupuk lokal (kompos, pupuk kandang) **yang menargetkan kekurangan yang diidentifikasi**
-        # - Strategi pengendalian hama yang ramah lingkungan
+        ## 🌾 Rekomendasi Khusus Indonesia
+        - Tanaman pendamping yang cocok untuk iklim Indonesia
+        - Teknik pertanian organik yang tepat
+        - Pemanfaatan pupuk lokal (kompos, pupuk kandang) **yang menargetkan kekurangan yang diidentifikasi**
+        - Strategi pengendalian hama yang ramah lingkungan
         
-        # Berikan rekomendasi yang praktis, spesifik, dan dapat ditindaklanjuti. Fokus pada perbaikan yang dapat diukur yang selaras dengan kondisi pertanian Indonesia dan **secara langsung mengatasi faktor-faktor pembatas yang diidentifikasi oleh model ML**.
+        Berikan rekomendasi yang praktis, spesifik, dan dapat ditindaklanjuti. Fokus pada perbaikan yang dapat diukur yang selaras dengan kondisi pertanian Indonesia dan **secara langsung mengatasi faktor-faktor pembatas yang diidentifikasi oleh model ML**.
         
-        # Jawab dalam bahasa Indonesia yang mudah dipahami oleh petani dengan latar belakang pendidikan beragam.
-        # """
+        Jawab dalam bahasa Indonesia yang mudah dipahami oleh petani dengan latar belakang pendidikan beragam.
+        """
         
         system_prompt = "Anda adalah ahli pertanian Indonesia yang berpengalaman dalam optimalisasi lingkungan dan praktik pertanian berkelanjutan. Berikan saran yang praktis, spesifik, dan dapat diterapkan oleh petani Indonesia."
         
@@ -2121,9 +2192,9 @@ def display_sensor_input_form():
             st.markdown("**Kondisi Tanah**")
             ph = st.number_input("Tingkat pH", min_value=3.0, max_value=10.0, value=float(default_data.get('ph', 6.5)), step=0.1, help="Tingkat pH tanah")
             
-            # Additional context
-            st.markdown("**Opsional**")
-            field_size = st.number_input("Ukuran Lahan (hektar)", min_value=0.1, max_value=1000.0, value=float(default_data.get('field_size', 1.0)), step=0.1, help="Ukuran lahan pertanian")
+            # Luas lahan pertanian
+            st.markdown("**Luas Lahan Pertanian**")
+            land_area = st.number_input("Luas Lahan (hektar)", min_value=0.1, max_value=1000.0, value=float(default_data.get('land_area', 1.0)), step=0.1, help="Luas lahan yang akan ditanami")
         
         # Location info display (read-only in form)
         st.markdown("---")
@@ -2273,7 +2344,7 @@ def display_sensor_input_form():
                 'humidity': humidity,
                 'ph': ph,
                 'rainfall': rainfall,
-                'field_size': field_size,
+                'land_area': land_area,
                 'location': location,
                 'selected_crop': selected_crop
             }
@@ -2431,7 +2502,7 @@ def display_results(sensor_data, decision_system):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Ukuran Lahan", f"{sensor_data.get('field_size', 'N/A')} ha")
+        st.metric("Luas Lahan", f"{sensor_data.get('land_area', sensor_data.get('field_size', 'N/A'))} ha")
         st.metric("pH Tanah", f"{sensor_data.get('ph', 'N/A')}")
     
     with col2:
@@ -2749,7 +2820,10 @@ def display_interaction_history():
                     st.rerun()
         
         # Add confidence badge if available
-        if interaction['ml_result'] and len(interaction['ml_result']) >= 2:
+        if (interaction.get('ml_result') and 
+            isinstance(interaction['ml_result'], (list, tuple)) and 
+            len(interaction['ml_result']) >= 2 and
+            interaction['ml_result'][1] is not None):
             confidence = interaction['ml_result'][1] * 100
             if confidence >= 70:
                 badge_color = "#27ae60"
@@ -2822,25 +2896,25 @@ def display_new_interaction_form():
                     preset_data = {
                         'N': 80, 'P': 40, 'K': 40, 'temperature': 26, 
                         'humidity': 80, 'ph': 6.5, 'rainfall': 1200,
-                        'field_size': 2.0, 'selected_crop': 'rice', 'location': 'Jawa Barat'
+                        'land_area': 2.0, 'selected_crop': 'rice', 'location': 'Jawa Barat'
                     }
                 elif preset == "Maize - Dry Season":
                     preset_data = {
                         'N': 90, 'P': 50, 'K': 30, 'temperature': 28,
                         'humidity': 55, 'ph': 6.8, 'rainfall': 800,
-                        'field_size': 3.0, 'selected_crop': 'maize', 'location': 'Jawa Tengah'
+                        'land_area': 3.0, 'selected_crop': 'maize', 'location': 'Jawa Tengah'
                     }
                 elif preset == "Cotton - Commercial":
                     preset_data = {
                         'N': 120, 'P': 70, 'K': 150, 'temperature': 30,
                         'humidity': 45, 'ph': 7.2, 'rainfall': 600,
-                        'field_size': 5.0, 'selected_crop': 'cotton', 'location': 'Sulawesi'
+                        'land_area': 5.0, 'selected_crop': 'cotton', 'location': 'Sulawesi'
                     }
                 elif preset == "Banana - Humid":
                     preset_data = {
                         'N': 100, 'P': 60, 'K': 180, 'temperature': 27,
                         'humidity': 85, 'ph': 6.0, 'rainfall': 1500,
-                        'field_size': 1.5, 'selected_crop': 'banana', 'location': 'Kalimantan'
+                        'land_area': 1.5, 'selected_crop': 'banana', 'location': 'Kalimantan'
                     }
                 
                 # Store preset data in session state for main form to use

@@ -41,6 +41,13 @@ from src.services.mapping import (
 )
 from src.core.ml_predictor import AICropPredictor
 
+# Import LLM services
+from src.services.llm_service import agricultural_llm
+from src.services.knowledge_base import knowledge_base
+from src.services.location_context import location_context_service
+from src.services.recommendation_engine import recommendation_engine
+from src.services.evaluation_service import evaluation_service
+
 # ==================== APP CONFIGURATION ====================
 
 def configure_streamlit():
@@ -83,12 +90,24 @@ def initialize_app():
     # Check library availability
     library_status = check_library_availability()
     
+    # Check LLM service status
+    llm_status = agricultural_llm.get_service_status()
+    kb_status = knowledge_base.get_status()
+    eval_status = evaluation_service.get_service_status()
+    
     # Print status to console
-    print("📋 Agricultural Decision Support System - Modular Version")
+    print("📋 Agricultural Decision Support System - LLM Enhanced Version")
     print("=" * 60)
+    print("🔧 Core Libraries:")
     for lib, available in library_status.items():
         status = "✅" if available else "❌"
-        print(f"{status} {lib.replace('_', ' ').title()}")
+        print(f"  {status} {lib.replace('_', ' ').title()}")
+    
+    print("\n🤖 LLM Services:")
+    print(f"  {'✅' if llm_status['ollama']['available'] else '❌'} Ollama LLM")
+    print(f"  {'✅' if llm_status['openrouter']['available'] else '❌'} OpenRouter LLM")
+    print(f"  {'✅' if kb_status['available'] else '❌'} Knowledge Base (Qdrant)")
+    print(f"  {'✅' if eval_status['evaluation_service_available'] else '❌'} Evaluation Service")
     print("=" * 60)
 
 # ==================== LOCATION SELECTION INTERFACE ====================
@@ -158,6 +177,10 @@ def display_gps_completed_mode():
     with col2:
         if st.button("✏️ Edit GPS", type="secondary"):
             st.session_state.gps_auto_refresh_completed = False
+            st.session_state.gps_location_data = None
+            st.session_state.selected_location_pin = None
+            st.session_state.selected_location = None
+            st.session_state.selected_location_source = None
             st.rerun()
 
 def display_location_tabs():
@@ -226,7 +249,8 @@ def validate_and_fix_default_data(default_data: dict) -> dict:
         'temperature': 'temperature',
         'humidity': 'humidity',
         'ph': 'ph',
-        'rainfall': 'rainfall'
+        'rainfall': 'rainfall',
+        'land_area': 'land_area'
     }
     
     for key, standard_name in param_mapping.items():
@@ -241,7 +265,7 @@ def validate_and_fix_default_data(default_data: dict) -> dict:
                 print(f"⚠️ INVALID {key}: Using default {SENSOR_PARAMS[standard_name]['default']}")
     
     # Also check standard parameter names
-    for param_name in ['nitrogen', 'phosphorus', 'potassium', 'temperature', 'humidity', 'ph', 'rainfall']:
+    for param_name in ['nitrogen', 'phosphorus', 'potassium', 'temperature', 'humidity', 'ph', 'rainfall', 'land_area']:
         if param_name in fixed_data:
             try:
                 original_value = float(fixed_data[param_name])
@@ -280,12 +304,36 @@ def display_sensor_form():
     elif st.session_state.preset_data:
         default_data = st.session_state.preset_data.copy()
         preset_name = st.session_state.preset_name or "Custom"
-        st.info(f"📋 **Loaded preset:** {preset_name}")
+        
+        # Show enhanced preset info with suggested location
+        suggested_location = default_data.get('suggested_location')
+        if suggested_location:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.success(f"📋 **Loaded preset:** {preset_name}")
+                st.info(f"💡 **Suggested location:** {suggested_location}")
+            with col2:
+                # Button to use suggested location
+                if st.button("🎯 Use Location", type="primary", help="Use suggested location for this preset"):
+                    coordinates = default_data.get('location_coordinates')
+                    if coordinates:
+                        # Set location data in session state
+                        st.session_state.selected_location = {
+                            'coordinates': coordinates,
+                            'address': suggested_location,
+                            'source': 'preset_suggestion'
+                        }
+                        st.session_state.temp_coordinates = coordinates
+                        st.success(f"✅ Location set: {suggested_location}")
+                        st.rerun()
+        else:
+            st.info(f"📋 **Loaded preset:** {preset_name}")
+            st.warning("📍 Please select a location to continue")
     
     # Priority 3: Use defaults
     else:
         # Use default values from config
-        for param in ['nitrogen', 'phosphorus', 'potassium', 'temperature', 'humidity', 'ph', 'rainfall']:
+        for param in ['nitrogen', 'phosphorus', 'potassium', 'temperature', 'humidity', 'ph', 'rainfall', 'land_area']:
             default_data[param] = SENSOR_PARAMS[param]['default']
     
     # CRITICAL: Validate and fix default data to prevent Streamlit errors
@@ -345,6 +393,17 @@ def display_sensor_form():
                 value=float(default_data.get('ph', SENSOR_PARAMS['ph']['default'])),
                 step=0.1,
                 help="Tingkat keasaman tanah (pH)" if location_available else "Pilih lokasi terlebih dahulu",
+                disabled=not location_available
+            )
+            
+            st.markdown("### 🏞️ Luas Lahan")
+            land_area = st.number_input(
+                "Luas Lahan Pertanian",
+                min_value=SENSOR_PARAMS['land_area']['min'],
+                max_value=SENSOR_PARAMS['land_area']['max'],
+                value=float(default_data.get('land_area', SENSOR_PARAMS['land_area']['default'])),
+                step=0.1,
+                help=f"Luas lahan yang akan ditanami ({SENSOR_PARAMS['land_area']['unit']})" if location_available else "Pilih lokasi terlebih dahulu",
                 disabled=not location_available
             )
         
@@ -418,6 +477,7 @@ def display_sensor_form():
                 'humidity': humidity,
                 'ph': ph,
                 'rainfall': rainfall,
+                'land_area': land_area,
                 'selected_crop': CROP_MAPPING[selected_crop_display],
                 'selected_crop_display': selected_crop_display,
                 'location': location_data['address'],
@@ -509,6 +569,7 @@ def display_loaded_interaction_results():
         ('💧 Humidity', sensor_data.get('humidity', 0), '%'),
         ('🧪 pH Tanah', sensor_data.get('ph', 0), ''),
         ('🌧️ Rainfall', sensor_data.get('rainfall', 0), 'mm'),
+        ('🏞️ Luas Lahan', sensor_data.get('land_area', 0), 'ha'),
     ]
     
     # Display parameters in grid
@@ -520,36 +581,96 @@ def display_loaded_interaction_results():
     
     # ML Results - Main Results Section
     if ml_result:
-        st.markdown("### 📊 Hasil Analisis Machine Learning")
+        st.markdown("### 📊 Analisis Tanaman")
         
         # Key metrics in prominent display
-        result_cols = st.columns(3)
-        
-        with result_cols[0]:
-            recommendation = ml_result.get('recommendation', 'N/A')
-            # Color based on recommendation
-            if 'Sangat Cocok' in recommendation:
-                st.success(f"🎯 **{recommendation}**")
-            elif 'Cukup Cocok' in recommendation:
-                st.warning(f"🎯 **{recommendation}**") 
-            else:
-                st.error(f"🎯 **{recommendation}**")
+        result_cols = st.columns(2)
         
         with result_cols[1]:
+            recommendation = ml_result.get('recommendation', 'N/A')
             confidence = ml_result.get('confidence', 0)
-            st.metric("📈 Confidence", f"{confidence:.1%}")
+            # Pilih simbol dan warna background sesuai kategori
+            if 'Sangat Cocok' in recommendation:
+                symbol = "✅"
+                bg_color = "#d1e7dd"  # success (greenish)
+                font_color = "#0f5132"
+            elif 'Cukup Cocok' in recommendation:
+                symbol = "⚠️"
+                bg_color = "#fff3cd"  # warning (yellowish)
+                font_color = "#664d03"
+            else:
+                symbol = "❌"
+                bg_color = "#f8d7da"  # danger (reddish)
+                font_color = "#842029"
+            st.markdown(
+                f"""
+                <div style="background-color: {bg_color}; color: {font_color}; border-radius: 0.5rem; padding: 1.2em 0.5em; text-align: center; border: 1px solid #ccc; margin-right: 1.5em;">
+                    <span style="font-size: 1.5em;">{symbol} {recommendation} {confidence:.1%}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         
-        with result_cols[2]:
+
+        
+        with result_cols[0]:
             crop_display = sensor_data.get('selected_crop_display', 'N/A')
             st.metric("🌾 Target Tanaman", crop_display)
         
-        # Detailed explanation
-        explanation = ml_result.get('explanation', '')
-        if explanation:
-            st.markdown("### 💡 Penjelasan Detail AI")
-            st.markdown(explanation)
     else:
         st.warning("⚠️ **Hasil ML tidak tersedia untuk interaction ini**")
+    
+    st.markdown("---")
+    
+    # AI Results - Comprehensive Analysis Section  
+    ai_result = interaction_data.get('ai_result', {})
+    if ai_result:
+        st.markdown("### 🤖 Hasil Analisis AI Komprehensif")
+        
+        # Suitability Score
+        suitability_score = ai_result.get('suitability_score', 0.0)
+        confidence_level = ai_result.get('confidence_level', 'medium')
+        
+        result_cols = st.columns(2)
+        with result_cols[0]:
+            st.metric("🎯 Skor Kesesuaian", f"{suitability_score:.1%}")
+        with result_cols[1]:
+            st.metric("📊 Level Confidence", confidence_level.title())
+        
+        # LLM Analysis
+        llm_analysis = ai_result.get('llm_analysis', '')
+        if llm_analysis and llm_analysis.strip():
+            st.markdown("#### 🧠 Analisis LLM")
+            st.markdown(llm_analysis)
+        
+        # Recommendations
+        recommendations = ai_result.get('recommendations', {})
+        if recommendations:
+            st.markdown("#### 💡 Rekomendasi AI")
+            
+            if recommendations.get('immediate_actions'):
+                st.markdown("**⚡ Tindakan Segera:**")
+                for action in recommendations['immediate_actions'][:3]:
+                    st.markdown(f"- {action}")
+            
+            if recommendations.get('short_term_improvements'):
+                st.markdown("**🔧 Perbaikan Jangka Pendek:**")
+                for improvement in recommendations['short_term_improvements'][:3]:
+                    st.markdown(f"- {improvement}")
+        
+        # Risk Assessment
+        risk_assessment = ai_result.get('risk_assessment', {})
+        if risk_assessment:
+            overall_risk = risk_assessment.get('overall_risk_level', 'medium')
+            st.markdown(f"#### ⚠️ Penilaian Risiko: **{overall_risk.title()}**")
+            
+            risks = risk_assessment.get('identified_risks', [])
+            if risks:
+                st.markdown("**Risiko yang Teridentifikasi:**")
+                for risk in risks[:3]:
+                    st.markdown(f"- {risk}")
+    else:
+        st.warning("⚠️ **Hasil AI tidak tersedia untuk interaction ini**")
     
     st.markdown("---")
     
@@ -590,11 +711,528 @@ def display_loaded_interaction_results():
 # ==================== RESULTS DISPLAY ====================
 
 def display_analysis_results(sensor_data: Dict[str, Any]):
-    """Display ML analysis results"""
+    """Display Machine Learning analysis results as main focus"""
     
-    st.markdown("## 📊 Hasil Analisis Lahan")
+    st.markdown("## 📊 Hasil Analisis")
     
-    # Initialize ML predictor
+    # Get location data if available
+    location_data = get_current_location_data()
+    
+    # Show analysis progress
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    try:
+        # Step 1: Comprehensive Evaluation
+        status_text.text("🔄 Melakukan evaluasi komprehensif...")
+        progress_bar.progress(20)
+        
+        evaluation = evaluation_service.comprehensive_crop_evaluation(
+            sensor_data, location_data, sensor_data['selected_crop']
+        )
+        
+        progress_bar.progress(40)
+        status_text.text("🤖 Menganalisis dengan AI...")
+        
+        # Step 2: Additional recommendations
+        progress_bar.progress(60)
+        status_text.text("🗺️ Menganalisis konteks lokasi...")
+        
+        location_advice = None
+        if location_data:
+            location_advice = location_context_service.generate_location_specific_recommendations(
+                location_data, sensor_data
+            )
+        
+        progress_bar.progress(80)
+        status_text.text("📚 Mencari informasi relevan...")
+        
+        # Step 3: Finalize
+        progress_bar.progress(100)
+        status_text.text("✅ Analisis selesai!")
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+        
+        # Display Results
+        display_comprehensive_results(evaluation, location_advice, sensor_data)
+        
+        # Save comprehensive results
+        save_comprehensive_results(evaluation, location_advice, sensor_data)
+        
+    except Exception as e:
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"❌ **Error dalam analisis:** {str(e)}")
+        
+        # Fallback to basic ML analysis
+        st.warning("⚠️ Menggunakan analisis dasar sebagai fallback...")
+        display_basic_analysis_fallback(sensor_data)
+
+def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: Dict[str, Any], sensor_data: Dict[str, Any]):
+    """Display Machine Learning results as main focus"""
+    
+    # Get ML analysis results
+    ml_analysis = evaluation.get('ml_analysis', {})
+    
+    if ml_analysis.get('available'):
+        # Main ML Results Display
+    
+
+        result_cols = st.columns(2)
+        
+        with result_cols[1]:
+            recommendation = ml_analysis.get('crop_prediction', 'N/A')
+            confidence = ml_analysis.get('confidence', 0.0)
+            # Pilih simbol dan warna background sesuai kategori
+            if 'Sangat Cocok' in recommendation:
+                symbol = "✅"
+                bg_color = "#d1e7dd"  # success (greenish)
+                font_color = "#0f5132"
+            elif 'Cukup Cocok' in recommendation:
+                symbol = "⚠️"
+                bg_color = "#fff3cd"  # warning (yellowish)
+                font_color = "#664d03"
+            else:
+                symbol = "❌"
+                bg_color = "#f8d7da"  # danger (reddish)
+                font_color = "#842029"
+            st.markdown(
+                f"""
+                <div style="background-color: {bg_color}; color: {font_color}; border-radius: 0.5rem; padding: 1.2em 0.5em; text-align: center; border: 1px solid #ccc; margin-right: 1.5em;">
+                    <span style="font-size: 1.5em;">{symbol} {recommendation} {confidence:.1%}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+
+        
+        with result_cols[0]:
+            crop_display = sensor_data.get('selected_crop_display', 'N/A')
+            st.metric("🌾 Target Tanaman", crop_display)
+        
+
+        # ML Explanation
+        # explanation = ml_analysis.get('explanation', '')
+        # if explanation:
+        #     st.markdown("### 💡 Penjelasan Detail Machine Learning")
+        #     st.info(explanation)
+        
+        st.markdown("---")
+        
+        # Top Recommendations
+        if 'top_recommendations' in ml_analysis:
+            st.markdown("### 🏆 Top Rekomendasi Tanaman (ML)")
+            
+            top_recs = ml_analysis['top_recommendations'][:5]  # Top 5
+            rec_cols = st.columns(len(top_recs))
+            
+            for i, (crop, conf) in enumerate(top_recs):
+                with rec_cols[i]:
+                    # Color coding based on confidence
+                    if conf > 0.7:
+                        color = "🟢"
+                    elif conf > 0.5:
+                        color = "🟡" 
+                    else:
+                        color = "🔴"
+                    
+                    st.metric(
+                        f"{color} #{i+1}",
+                        crop.title(),
+                        f"{conf:.1%}"
+                    )
+    else:
+        # Fallback if ML not available
+        st.warning("⚠️ **Hasil Machine Learning tidak tersedia**")
+        
+        # Show basic metrics from evaluation
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            suitability_score = evaluation.get('suitability_score', 0.0)
+            color = "normal" if suitability_score > 0.7 else "inverse"
+            st.metric(
+                "🎯 Kesesuaian",
+                f"{suitability_score:.1%}",
+                f"Level: {evaluation.get('confidence_level', 'medium').title()}",
+                delta_color=color
+            )
+        
+        with col2:
+            st.metric(
+                "🌾 Tanaman",
+                sensor_data['selected_crop_display']
+            )
+        
+        with col3:
+            if location_advice:
+                region = location_advice.get('location_context', {}).get('region', 'Unknown')
+                st.metric(
+                    "📍 Wilayah",
+                    region.replace('_', ' ').title() if region != 'Unknown' else 'Unknown'
+                )
+            else:
+                st.metric(
+                    "📍 Lokasi",
+                    sensor_data['location'].split(',')[0] if ',' in sensor_data['location'] else sensor_data['location']
+                )
+        
+        with col4:
+            risk_level = evaluation.get('risk_assessment', {}).get('overall_risk_level', 'medium')
+            risk_color = "normal" if risk_level == "low" else "inverse"
+            st.metric(
+                "⚠️ Tingkat Risiko",
+                risk_level.title(),
+                delta_color=risk_color
+            )
+    
+    # Tabs for detailed analysis
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🤖 Analisis AI", "📋 Rekomendasi", "📍 Konteks Lokasi", "⚠️ Risiko", "🔄 Alternatif"
+    ])
+    
+    with tab1:
+        display_ai_analysis_tab(evaluation)
+    
+    with tab2:
+        display_recommendations_tab(evaluation)
+    
+    with tab3:
+        display_location_context_tab(evaluation, location_advice)
+    
+    with tab4:
+        display_risk_analysis_tab(evaluation)
+    
+    with tab5:
+        display_alternatives_tab(evaluation)
+
+def display_ai_analysis_tab(evaluation: Dict[str, Any]):
+    """Display AI analysis results"""
+    
+    st.markdown("### 🤖 Analisis Artificial Intelligence")
+    
+    # ML Analysis
+    ml_analysis = evaluation.get('ml_analysis', {})
+    if ml_analysis.get('available'):
+        st.markdown("#### 🔬 Analisis Machine Learning")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**Prediksi:** {ml_analysis.get('crop_prediction', 'N/A')}")
+            st.markdown(f"**Confidence:** {ml_analysis.get('confidence', 0):.1%}")
+        
+        with col2:
+            if 'top_recommendations' in ml_analysis:
+                st.markdown("**Top Rekomendasi ML:**")
+                for i, (crop, conf) in enumerate(ml_analysis['top_recommendations'][:3], 1):
+                    st.markdown(f"{i}. {crop} ({conf:.1%})")
+        
+        if ml_analysis.get('explanation'):
+            st.markdown("**Penjelasan Model:**")
+            st.markdown(ml_analysis['explanation'])
+    
+    # LLM Analysis
+    llm_analysis = evaluation.get('llm_analysis')
+    if llm_analysis and llm_analysis.strip():
+        st.markdown("#### 🧠 Analisis Large Language Model")
+        st.markdown(llm_analysis)
+    
+    # Knowledge Base Insights
+    kb_insights = evaluation.get('knowledge_base_insights', [])
+    if kb_insights:
+        st.markdown("#### 📚 Wawasan dari Knowledge Base")
+        for insight in kb_insights[:3]:
+            with st.expander(f"📖 {insight['category'].replace('_', ' ').title()} (Score: {insight['similarity_score']:.2f})"):
+                st.markdown(insight['content'])
+
+def display_recommendations_tab(evaluation: Dict[str, Any]):
+    """Display recommendations"""
+    
+    st.markdown("### 📋 Rekomendasi Komprehensif")
+    
+    recommendations = evaluation.get('recommendations', {})
+    
+    # Immediate Actions
+    if recommendations.get('immediate_actions'):
+        st.markdown("#### ⚡ Tindakan Segera")
+        for action in recommendations['immediate_actions']:
+            st.markdown(f"- {action}")
+    
+    # Short-term Improvements
+    if recommendations.get('short_term_improvements'):
+        st.markdown("#### 🔧 Perbaikan Jangka Pendek")
+        for improvement in recommendations['short_term_improvements']:
+            st.markdown(f"- {improvement}")
+    
+    # Long-term Strategies
+    if recommendations.get('long_term_strategies'):
+        st.markdown("#### 🎯 Strategi Jangka Panjang")
+        for strategy in recommendations['long_term_strategies']:
+            st.markdown(f"- {strategy}")
+    
+    # Resource Requirements
+    if recommendations.get('resource_requirements'):
+        st.markdown("#### 💰 Kebutuhan Sumber Daya")
+        resources = recommendations['resource_requirements']
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            for key, value in list(resources.items())[:len(resources)//2]:
+                st.markdown(f"**{key.replace('_', ' ').title()}:** {value}")
+        with col2:
+            for key, value in list(resources.items())[len(resources)//2:]:
+                st.markdown(f"**{key.replace('_', ' ').title()}:** {value}")
+    
+    # Timeline
+    if recommendations.get('timeline'):
+        st.markdown("#### 📅 Timeline Implementasi")
+        timeline = recommendations['timeline']
+        for period, activity in timeline.items():
+            st.markdown(f"**{period.replace('_', ' ').title()}:** {activity}")
+
+def display_location_context_tab(evaluation: Dict[str, Any], location_advice: Dict[str, Any]):
+    """Display location context analysis"""
+    
+    st.markdown("### 📍 Analisis Konteks Lokasi")
+    
+    location_context = evaluation.get('location_context')
+    
+    if location_context:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🗺️ Informasi Wilayah")
+            st.markdown(f"**Region:** {location_context.get('region', 'Unknown').replace('_', ' ').title()}")
+            st.markdown(f"**Zona Iklim:** {location_context.get('climate_zone', 'Unknown').replace('_', ' ').title()}")
+            st.markdown(f"**Estimasi Ketinggian:** {location_context.get('elevation_estimate', 0)} meter")
+            st.markdown(f"**Confidence:** {location_context.get('confidence', 0):.1%}")
+        
+        with col2:
+            regional_data = location_context.get('regional_data', {})
+            if regional_data:
+                st.markdown("#### 🌾 Data Regional")
+                if 'main_crops' in regional_data:
+                    st.markdown(f"**Tanaman Utama:** {', '.join(regional_data['main_crops'])}")
+                if 'rainfall' in regional_data:
+                    st.markdown(f"**Curah Hujan:** {regional_data['rainfall']}")
+                if 'temperature' in regional_data:
+                    st.markdown(f"**Suhu:** {regional_data['temperature']}")
+    
+    # Location-specific advice
+    if location_advice:
+        st.markdown("#### 🎯 Saran Spesifik Lokasi")
+        
+        # Crop recommendations
+        crop_recs = location_advice.get('crop_recommendations', [])
+        if crop_recs:
+            st.markdown("**Rekomendasi Tanaman:**")
+            for crop in crop_recs:
+                st.markdown(f"- {crop}")
+        
+        # Climate adaptations
+        climate_adapt = location_advice.get('climate_adaptations', [])
+        if climate_adapt:
+            st.markdown("**Adaptasi Iklim:**")
+            for adaptation in climate_adapt:
+                st.markdown(f"- {adaptation}")
+
+def display_risk_analysis_tab(evaluation: Dict[str, Any]):
+    """Display risk analysis"""
+    
+    st.markdown("### ⚠️ Analisis Risiko")
+    
+    risk_assessment = evaluation.get('risk_assessment', {})
+    
+    # Overall risk level
+    overall_risk = risk_assessment.get('overall_risk_level', 'medium')
+    risk_color = "🟢" if overall_risk == "low" else "🟡" if overall_risk == "medium" else "🔴"
+    st.markdown(f"#### {risk_color} Tingkat Risiko Keseluruhan: {overall_risk.title()}")
+    
+    # Specific risks
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        env_risks = risk_assessment.get('environmental_risks', [])
+        if env_risks:
+            st.markdown("**🌍 Risiko Lingkungan:**")
+            for risk in env_risks:
+                severity = risk.get('level', 'medium')
+                severity_icon = "🔴" if severity == "high" else "🟡" if severity == "medium" else "🟢"
+                st.markdown(f"- {severity_icon} {risk.get('risk', 'Unknown')}")
+                st.markdown(f"  *Mitigasi: {risk.get('mitigation', 'N/A')}*")
+    
+    with col2:
+        nut_risks = risk_assessment.get('nutritional_risks', [])
+        if nut_risks:
+            st.markdown("**🧪 Risiko Nutrisi:**")
+            for risk in nut_risks:
+                severity = risk.get('level', 'medium')
+                severity_icon = "🔴" if severity == "high" else "🟡" if severity == "medium" else "🟢"
+                st.markdown(f"- {severity_icon} {risk.get('risk', 'Unknown')}")
+                st.markdown(f"  *Mitigasi: {risk.get('mitigation', 'N/A')}*")
+    
+    # Location risks
+    loc_risks = risk_assessment.get('location_risks', [])
+    if loc_risks:
+        st.markdown("**📍 Risiko Lokasi:**")
+        for risk in loc_risks:
+            severity = risk.get('level', 'medium')
+            severity_icon = "🔴" if severity == "high" else "🟡" if severity == "medium" else "🟢"
+            st.markdown(f"- {severity_icon} {risk.get('risk', 'Unknown')}")
+            st.markdown(f"  *Mitigasi: {risk.get('mitigation', 'N/A')}*")
+
+def display_alternatives_tab(evaluation: Dict[str, Any]):
+    """Display alternative crop suggestions"""
+    
+    st.markdown("### 🔄 Alternatif Tanaman")
+    
+    alternatives = evaluation.get('alternative_crops', [])
+    
+    if alternatives:
+        st.markdown("#### 🌾 Tanaman Alternatif yang Direkomendasikan")
+        
+        for i, alt in enumerate(alternatives, 1):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.markdown(f"**{i}. {alt['crop'].replace('_', ' ').title()}**")
+            
+            with col2:
+                st.markdown(f"Confidence: {alt['confidence']:.1%}")
+            
+            with col3:
+                st.markdown(f"*{alt['source']}*")
+    
+    # Optimization suggestions
+    optimization = evaluation.get('optimization_suggestions', [])
+    if optimization:
+        st.markdown("#### 🔧 Saran Optimasi")
+        for suggestion in optimization:
+            st.markdown(f"- {suggestion}")
+    
+    # Alternative crops based on condition improvement
+    st.markdown("#### 💡 Jika Kondisi Diperbaiki")
+    
+    suitability_score = evaluation.get('suitability_score', 0.0)
+    if suitability_score < 0.6:
+        st.markdown("Dengan perbaikan kondisi tanah dan nutrisi, tanaman berikut mungkin lebih cocok:")
+        
+        # Get location context for better suggestions
+        location_context = evaluation.get('location_context')
+        if location_context:
+            regional_data = location_context.get('regional_data', {})
+            main_crops = regional_data.get('main_crops', [])
+            
+            for crop in main_crops[:3]:
+                st.markdown(f"- 🌱 {crop.replace('_', ' ').title()}")
+        else:
+            st.markdown("- 🌱 Konsultasikan dengan petani lokal untuk rekomendasi spesifik")
+
+def save_comprehensive_results(evaluation: Dict[str, Any], location_advice: Dict[str, Any], sensor_data: Dict[str, Any]):
+    """Save comprehensive evaluation results"""
+    
+    import uuid
+    
+    # Extract ML results from evaluation
+    ml_analysis = evaluation.get('ml_analysis', {})
+    ml_result = {
+        'recommendation': ml_analysis.get('crop_prediction', 'N/A'),
+        'confidence': ml_analysis.get('confidence', 0.0),
+        'explanation': ml_analysis.get('explanation', ''),
+        'available': ml_analysis.get('available', False),
+        'top_recommendations': ml_analysis.get('top_recommendations', [])
+    } if ml_analysis.get('available') else None
+    
+    # Extract AI results from evaluation  
+    ai_result = {
+        'llm_analysis': evaluation.get('llm_analysis', ''),
+        'knowledge_base_insights': evaluation.get('knowledge_base_insights', []),
+        'recommendations': evaluation.get('recommendations', {}),
+        'risk_assessment': evaluation.get('risk_assessment', {}),
+        'alternatives': evaluation.get('alternatives', []),
+        'suitability_score': evaluation.get('suitability_score', 0.0),
+        'confidence_level': evaluation.get('confidence_level', 'medium')
+    }
+    
+    # Prepare comprehensive interaction data
+    interaction_data = {
+        'id': str(uuid.uuid4())[:8],
+        'timestamp': datetime.now(),
+        'sensor_data': sensor_data,
+        'ml_result': ml_result,  # ✅ Properly formatted for database
+        'ai_result': ai_result,  # ✅ Properly formatted for database  
+        'evaluation_result': evaluation,  # Keep full evaluation for session state
+        'location_advice': location_advice,
+        'title': f"{sensor_data['selected_crop_display']} - {sensor_data['location'].split(',')[0]}",
+        'suitability_score': evaluation.get('suitability_score', 0.0),
+        'confidence_level': evaluation.get('confidence_level', 'medium'),
+        'risk_level': evaluation.get('risk_assessment', {}).get('overall_risk_level', 'medium')
+    }
+    
+    # Clear preset data after successful submission and provide feedback
+    if st.session_state.preset_data:
+        preset_name = st.session_state.preset_name
+        st.session_state.preset_data = None
+        st.session_state.preset_name = None
+        print(f"✅ Preset '{preset_name}' successfully used and cleared")
+    
+    # Save to session state
+    if 'interaction_history' not in st.session_state:
+        st.session_state.interaction_history = []
+    
+    st.session_state.interaction_history.append(interaction_data)
+    st.session_state.current_interaction_id = interaction_data['id']
+    
+    # Keep only last 50 interactions in session state
+    if len(st.session_state.interaction_history) > 50:
+        st.session_state.interaction_history = st.session_state.interaction_history[-50:]
+    
+    # Save to MongoDB
+    if save_interaction_to_db(interaction_data):
+        st.success("✅ **Analisis komprehensif telah disimpan ke database dan history**")
+        st.session_state.sidebar_mode = 'history'
+    else:
+        st.success("✅ **Analisis komprehensif telah disimpan ke session history**")
+        st.session_state.sidebar_mode = 'history'
+    
+    # Show action buttons
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔄 Analisis Baru", type="secondary"):
+            st.session_state.current_interaction_id = None
+            st.session_state.preset_data = None
+            st.session_state.preset_name = None
+            st.rerun()
+    
+    with col2:
+        if st.button("📋 Lihat History", type="secondary"):
+            st.session_state.sidebar_mode = 'history'
+            st.rerun()
+    
+    with col3:
+        if st.button("📊 Status Sistem", type="secondary"):
+            with st.expander("🔧 Status Sistem LLM", expanded=True):
+                system_status = evaluation_service.get_service_status()
+                
+                st.markdown("**🤖 LLM Services:**")
+                llm_status = system_status.get('llm_service', {})
+                st.markdown(f"- Ollama: {'✅' if llm_status.get('ollama', {}).get('available') else '❌'}")
+                st.markdown(f"- OpenRouter: {'✅' if llm_status.get('openrouter', {}).get('available') else '❌'}")
+                
+                st.markdown("**📚 Knowledge Base:**")
+                kb_status = system_status.get('knowledge_base', {})
+                st.markdown(f"- Qdrant: {'✅' if kb_status.get('qdrant_connected') else '❌'}")
+                st.markdown(f"- Knowledge Count: {kb_status.get('knowledge_count', 0)}")
+                
+                st.markdown(f"**🔬 ML Predictor:** {'✅' if system_status.get('ml_predictor', {}).get('available') else '❌'}")
+
+def display_basic_analysis_fallback(sensor_data: Dict[str, Any]):
+    """Fallback to basic ML analysis if comprehensive analysis fails"""
+    
     try:
         predictor = AICropPredictor()
         
@@ -607,12 +1245,12 @@ def display_analysis_results(sensor_data: Dict[str, Any]):
             sensor_data, sensor_data['selected_crop']
         )
         
-        # Display results
+        # Display basic results
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric(
-                "🎯 Rekomendasi",
+                "🎯 Rekomendasi (ML)",
                 recommendation,
                 f"Confidence: {confidence:.1%}"
             )
@@ -629,73 +1267,46 @@ def display_analysis_results(sensor_data: Dict[str, Any]):
                 sensor_data['location'].split(',')[0] if ',' in sensor_data['location'] else sensor_data['location']
             )
         
-        # Show detailed explanation
-        st.markdown("### 💡 Penjelasan Detail")
+        # Show explanation
+        st.markdown("### 💡 Penjelasan ML Model")
         st.markdown(explanation)
         
-        # Save to database and session state
-        import uuid
-        interaction_data = {
-            'id': str(uuid.uuid4())[:8],
-            'timestamp': datetime.now(),
-            'sensor_data': sensor_data,
-            'ml_result': {
-                'recommendation': recommendation,
-                'confidence': confidence,
-                'explanation': explanation
-            },
-            'title': f"{sensor_data['selected_crop_display']} - {sensor_data['location'].split(',')[0]}"
-        }
-        
-        # Clear preset data after successful submission
-        if st.session_state.preset_data:
-            st.session_state.preset_data = None
-            st.session_state.preset_name = None
-        
-        # Save to session state
-        if 'interaction_history' not in st.session_state:
-            st.session_state.interaction_history = []
-        
-        st.session_state.interaction_history.append(interaction_data)
-        st.session_state.current_interaction_id = interaction_data['id']
-        
-        # Keep only last 50 interactions in session state to prevent memory issues
-        if len(st.session_state.interaction_history) > 50:
-            st.session_state.interaction_history = st.session_state.interaction_history[-50:]
-        
-        # Save to MongoDB
-        if save_interaction_to_db(interaction_data):
-            st.success("✅ **Hasil analisis telah disimpan ke database dan history**")
-            # Force sidebar to show updated history
-            st.session_state.sidebar_mode = 'history'
-        else:
-            st.success("✅ **Hasil analisis telah disimpan ke session history**")
-            st.session_state.sidebar_mode = 'history'
-        
-        # Immediate refresh to update sidebar with new interaction  
-        st.rerun()
+        st.info("ℹ️ **Menampilkan analisis dasar karena layanan LLM tidak tersedia**")
         
     except Exception as e:
-        st.error(f"❌ **Error dalam analisis:** {str(e)}")
+        st.error(f"❌ **Error dalam analisis dasar:** {str(e)}")
 
 # ==================== SIDEBAR ====================
 
 def display_sidebar():
-    """Display sidebar with history and controls - matches original implementation"""
+    """Display sidebar with history and controls - Enhanced with better integration"""
     
-    st.sidebar.markdown("# Menu Interaction History")
+    st.sidebar.markdown("# 📊 Agricultural Analysis Center")
     
-    # Mode selection buttons
+    # Status indicators
+    preset_loaded = bool(st.session_state.preset_data)
+    history_loaded = bool(st.session_state.current_interaction_id)
+    
+    if preset_loaded:
+        preset_name = st.session_state.preset_name or "Custom"
+        st.sidebar.success(f"📋 **{preset_name}** loaded")
+    elif history_loaded:
+        st.sidebar.info("🔄 **History interaction** loaded")
+    
+    # Mode selection buttons with enhanced labels
     col1, col2 = st.sidebar.columns(2)
     with col1:
-        if st.button("📋 History", type="primary" if st.session_state.sidebar_mode == 'history' else "secondary"):
+        history_count = len(st.session_state.interaction_history)
+        history_label = f"📋 History" if history_count > 0 else "📋 History"
+        if st.button(history_label, type="primary" if st.session_state.sidebar_mode == 'history' else "secondary"):
             st.session_state.sidebar_mode = 'history'
     with col2:
-        if st.button("➕ New", type="primary" if st.session_state.sidebar_mode == 'new' else "secondary"):
+        new_label = "➕ New" + (" ✨" if preset_loaded else "")
+        if st.button(new_label, type="primary" if st.session_state.sidebar_mode == 'new' else "secondary"):
             st.session_state.sidebar_mode = 'new'
-            st.session_state.current_interaction_id = None
-            st.session_state.preset_data = None
-            st.session_state.preset_name = None
+            # Only clear if switching from history mode, preserve preset
+            if not preset_loaded:
+                st.session_state.current_interaction_id = None
     
     st.sidebar.markdown("---")
     
@@ -749,33 +1360,58 @@ def main():
             display_analysis_results(sensor_data)
     
     # Development notes
-    with st.expander("🔧 Development Notes - Modular Structure", expanded=False):
+    with st.expander("🔧 LLM-Enhanced Agricultural Decision Support System", expanded=False):
         st.markdown("""
-        ### 📁 Modular Structure Created:
+        ### 📁 Complete LLM-Enhanced Modular Structure:
         
         ```
         src/
         ├── utils/
-        │   ├── config.py          ✅ Configuration & settings
-        │   └── helpers.py         ✅ Utility functions
+        │   ├── config.py              ✅ Configuration & settings
+        │   └── helpers.py             ✅ Utility functions
         ├── services/
-        │   ├── database.py        ✅ MongoDB operations
-        │   ├── location.py        ✅ GPS & geocoding
-        │   └── mapping.py         ✅ Map functionality
+        │   ├── database.py            ✅ MongoDB operations
+        │   ├── location.py            ✅ GPS & geocoding
+        │   ├── mapping.py             ✅ Map functionality
+        │   ├── llm_service.py         ✅ LLM integration (Ollama + OpenRouter)
+        │   ├── knowledge_base.py      ✅ Qdrant vector database
+        │   ├── location_context.py    ✅ Location-specific analysis
+        │   ├── recommendation_engine.py ✅ ML+LLM recommendations
+        │   └── evaluation_service.py   ✅ Comprehensive evaluation
         ├── core/
-        │   └── ml_predictor.py    ✅ AI/ML models
-        └── main.py                ✅ Main application
+        │   └── ml_predictor.py        ✅ AI/ML models
+        └── main.py                    ✅ Main LLM-enhanced application
         ```
         
-        ### 🚧 **Remaining to Extract:**
-        - `src/core/llm_service.py` - LLM integration
-        - `src/core/decision_system.py` - Decision support logic
-        - `src/components/sensor_form.py` - Form components
-        - `src/components/results_display.py` - Results UI
-        - `src/components/history_panel.py` - History sidebar
+        ### 🤖 **LLM Features Implemented:**
+        - **Multi-LLM Support**: Ollama (local) + OpenRouter (cloud) with intelligent fallback
+        - **Knowledge Base**: Qdrant vector database with Indonesian agricultural knowledge
+        - **Comprehensive Evaluation**: ML + LLM + Knowledge Base integration
+        - **Location Context**: Regional agricultural insights for Indonesia
+        - **Risk Assessment**: Environmental, nutritional, and location-based risks
+        - **Alternative Recommendations**: Crop alternatives based on conditions
+        - **Optimization Suggestions**: Step-by-step improvement plans
         
-        ### 📖 **See REFACTORING_GUIDE.md for complete instructions**
+        ### 📊 **System Status:** Real-time monitoring of all LLM services
         """)
+        
+        # Show real-time system status
+        system_status = evaluation_service.get_service_status()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**🤖 LLM Services:**")
+            llm_status = system_status.get('llm_service', {})
+            st.markdown(f"- Ollama: {'✅ Available' if llm_status.get('ollama', {}).get('available') else '❌ Unavailable'}")
+            st.markdown(f"- OpenRouter: {'✅ Available' if llm_status.get('openrouter', {}).get('available') else '❌ Unavailable'}")
+        
+        with col2:
+            st.markdown("**📚 Knowledge Systems:**")
+            kb_status = system_status.get('knowledge_base', {})
+            st.markdown(f"- Knowledge Base: {'✅ Active' if kb_status.get('available') else '❌ Inactive'}")
+            st.markdown(f"- ML Predictor: {'✅ Loaded' if system_status.get('ml_predictor', {}).get('available') else '❌ Error'}")
+        
+        st.markdown(f"**📊 Knowledge Count:** {kb_status.get('knowledge_count', 0)} entries")
 
 if __name__ == "__main__":
     main() 
