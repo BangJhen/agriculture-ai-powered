@@ -201,7 +201,7 @@ def display_gps_completed_mode():
 def display_location_tabs():
     """Display location selection tabs"""
     
-    tab1, tab2, tab3 = st.tabs(["🛰️ GPS Location", "🗺️ Interactive Map", "🔍 Search Location"])
+    tab1, tab2 = st.tabs(["🛰️ GPS Location", "🗺️ Interactive Map"])
     
     with tab1:
         st.markdown("### 🛰️ GPS Location Detection")
@@ -225,10 +225,7 @@ def display_location_tabs():
             st.error("⚠️ **Interactive Map tidak tersedia** - Map libraries tidak terinstall")
             st.info("💡 **Solusi:** Install dengan `pip install folium streamlit-folium`")
     
-    with tab3:
-        st.markdown("### 🔍 Search Location by Name")
-        st.info("🚧 **Under Development** - Fitur pencarian lokasi sedang dalam pengembangan")
-        st.markdown("💡 **Sementara ini:** Gunakan GPS atau Interactive Map untuk memilih lokasi")
+    # Search Location tab removed based on user request
 
 # ==================== SENSOR INPUT FORM ====================
 
@@ -295,7 +292,7 @@ def validate_and_fix_default_data(default_data: dict) -> dict:
 def display_sensor_form():
     """Display sensor input form"""
     
-    st.markdown("## 🌡️ Input Data Sensor Lahan")
+    st.markdown("##Input Data Sensor Lahan")
     
     # Get current location for display
     location_data = get_current_location_data()
@@ -370,7 +367,7 @@ def display_sensor_form():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("### 🧪 Nutrisi Tanah")
+            st.markdown("###Nutrisi Tanah")
             nitrogen = st.number_input(
                 "Nitrogen (N)", 
                 min_value=SENSOR_PARAMS['nitrogen']['min'],
@@ -411,7 +408,7 @@ def display_sensor_form():
                 disabled=not location_available
             )
             
-            st.markdown("### 🏞️ Luas Lahan")
+            st.markdown("###Luas Lahan")
             land_area = st.number_input(
                 "Luas Lahan Pertanian",
                 min_value=SENSOR_PARAMS['land_area']['min'],
@@ -423,7 +420,7 @@ def display_sensor_form():
             )
         
         with col2:
-            st.markdown("### 🌤️ Kondisi Lingkungan")
+            st.markdown("###Kondisi Lingkungan")
             temperature = st.number_input(
                 "Temperature",
                 min_value=SENSOR_PARAMS['temperature']['min'],
@@ -454,7 +451,7 @@ def display_sensor_form():
                 disabled=not location_available
             )
             
-        st.markdown("### 🌾 Target Tanaman")
+        st.markdown("### Target Tanaman")
         
         # Get default crop selection
         default_crop = default_data.get('selected_crop', 'rice')
@@ -568,7 +565,7 @@ def display_loaded_interaction_results():
         
         with result_cols[0]:
             crop_display = sensor_data.get('selected_crop_display', 'N/A')
-            st.metric("🌾 Target Tanaman", crop_display)
+            st.metric("Target Tanaman", crop_display)
         
         st.markdown("---")
         
@@ -810,8 +807,6 @@ def display_analysis_results(sensor_data: Dict[str, Any]):
         print(f"📊 Sensor data: {sensor_data}")
         print(f"📍 Location data: {location_data}")
         
-        # Debug system status when errors occur
-        debug_system_status()
         
         # Determine error type for better user feedback
         error_msg = str(e)
@@ -828,9 +823,6 @@ def display_analysis_results(sensor_data: Dict[str, Any]):
             st.error(f"❌ **Error dalam analisis:** {str(e)}")
             print("🔍 Root cause: Unknown error")
         
-        # Fallback to basic ML analysis
-        st.warning("⚠️ Menggunakan analisis dasar sebagai fallback...")
-        display_basic_analysis_fallback(sensor_data)
 
 def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: Dict[str, Any], sensor_data: Dict[str, Any]):
     """Display Machine Learning results as main focus"""
@@ -873,7 +865,7 @@ def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: D
         
         with result_cols[0]:
             crop_display = sensor_data.get('selected_crop_display', 'N/A')
-            st.metric("🌾 Target Tanaman", crop_display)
+            st.metric("Target Tanaman", crop_display)
         
 
         # ML Explanation
@@ -2115,29 +2107,13 @@ def save_comprehensive_results(evaluation: Dict[str, Any], location_advice: Dict
         st.session_state.sidebar_mode = 'history'
     
     # Show action buttons
-    col1, col2 = st.columns(2)
+    col1 = st.columns(1)
     
     with col1:
         if st.button("🔄 Analisis Baru", type="secondary"):
             reset_session_to_default()
             st.rerun()
     
-    with col2:
-        if st.button("📊 Status Sistem", type="secondary"):
-            with st.expander("🔧 Status Sistem LLM", expanded=True):
-                system_status = evaluation_service.get_service_status()
-                
-                st.markdown("**🤖 LLM Services:**")
-                llm_status = system_status.get('llm_service', {})
-                st.markdown(f"- Ollama: {'✅' if llm_status.get('ollama', {}).get('available') else '❌'}")
-                st.markdown(f"- OpenRouter: {'✅' if llm_status.get('openrouter', {}).get('available') else '❌'}")
-                
-                st.markdown("**📚 Knowledge Base:**")
-                kb_status = system_status.get('knowledge_base', {})
-                st.markdown(f"- Qdrant: {'✅' if kb_status.get('qdrant_connected') else '❌'}")
-                st.markdown(f"- Knowledge Count: {kb_status.get('knowledge_count', 0)}")
-                
-                st.markdown(f"**🔬 ML Predictor:** {'✅' if system_status.get('ml_predictor', {}).get('available') else '❌'}")
 
 def display_basic_analysis_fallback(sensor_data: Dict[str, Any]):
     """Fallback to basic ML analysis if comprehensive analysis fails"""
@@ -2253,8 +2229,7 @@ def display_basic_analysis_fallback(sensor_data: Dict[str, Any]):
             st.warning("⚠️ **Hasil analisis ditampilkan tetapi tidak dapat disimpan ke history**")
         
     except Exception as e:
-        st.error(f"❌ **Error dalam analisis dasar:** {str(e)}")
-        print(f"❌ Basic analysis error: {str(e)}")  # Log error to console
+        pass
 
 # ==================== SIDEBAR ====================
 
@@ -2395,45 +2370,7 @@ def main():
         
         # Show real-time system statu
 
-# ==================== DEBUG HELPERS ====================
 
-def debug_system_status():
-    """Debug function to check system status and log to console"""
-    print("\n" + "="*60)
-    print("🔧 SYSTEM STATUS DEBUG")
-    print("="*60)
-    
-    # Check LLM services
-    llm_status = agricultural_llm.get_service_status()
-    print("🤖 LLM Services:")
-    print(f"  Ollama: {'✅' if llm_status['ollama']['available'] else '❌'}")
-    print(f"  OpenRouter: {'✅' if llm_status['openrouter']['available'] else '❌'}")
-    
-    # Check Knowledge Base
-    kb_status = knowledge_base.get_status()
-    print("📚 Knowledge Base:")
-    print(f"  Qdrant: {'✅' if kb_status['available'] else '❌'}")
-    print(f"  Knowledge Count: {kb_status.get('knowledge_count', 0)}")
-    
-    # Check Evaluation Service
-    eval_status = evaluation_service.get_service_status()
-    print("🔬 Evaluation Service:")
-    print(f"  Available: {'✅' if eval_status['evaluation_service_available'] else '❌'}")
-    print(f"  ML Predictor: {'✅' if eval_status.get('ml_predictor', {}).get('available') else '❌'}")
-    
-    # Check MongoDB
-    mongo_manager = get_mongodb_manager()
-    print("🗄️ Database:")
-    print(f"  MongoDB: {'✅' if mongo_manager.is_connected() else '❌'}")
-    
-    # Check session state
-    history_count = len(st.session_state.get('interaction_history', []))
-    current_id = st.session_state.get('current_interaction_id', 'None')
-    print("📊 Session State:")
-    print(f"  History Count: {history_count}")
-    print(f"  Current ID: {current_id}")
-    
-    print("="*60 + "\n")
 
 if __name__ == "__main__":
     main() 

@@ -1,23 +1,22 @@
-# 🌾 Agricultural Decision Support System
+# TaniCerdas Nusantara
 
 **AI-Powered Crop Recommendations with Advanced LLM Integration**
 
 A complete agricultural decision support system with ML-based crop prediction and AI environmental optimization using OpenRouter. Features SHAP explainability for low-confidence predictions and fully localized Indonesian interface.
 
-## ✨ Features
+## Fitur Unggulan
+ - **Prediksi Tanaman ML**: Model Random Forest menganalisis N-P-K, iklim, pH
+ - **AI Optimization**: Strategi pemupukan via LLM (Ollama / OpenRouter)
+ - **SHAP Explainability**: Understand which factors limit crop suitability
+ - **Modular Architecture**: Clean, maintainable code structure in `src/` directory
+ - **Single File Option**: Complete functionality in `agricultural_chatbot.py`
+ - **Indonesian Interface**: Fully localized UI and prompts
+ - **Scientific Approach**: Evidence-based advice with confidence scoring
+ - **Persistent History**: MongoDB Atlas integration for interaction history storage
+ - **Location Integration**: GPS, interactive maps, and location search
+ - **Easy Launcher**: Enhanced bash script for simple deployment
 
-- **🤖 ML Crop Prediction**: Random Forest model analyzes soil nutrients, climate, and pH
-- **🧠 AI Optimization**: Personalized strategies using OpenRouter + advanced LLM models
-- **🔍 SHAP Explainability**: Understand which factors limit crop suitability
-- **🏗️ Modular Architecture**: Clean, maintainable code structure in `src/` directory
-- **📄 Single File Option**: Complete functionality in `agricultural_chatbot.py`
-- **🇮🇩 Indonesian Interface**: Fully localized UI and prompts
-- **📊 Scientific Approach**: Evidence-based advice with confidence scoring
-- **💾 Persistent History**: MongoDB Atlas integration for interaction history storage
-- **🗺️ Location Integration**: GPS, interactive maps, and location search
-- **⚡ Easy Launcher**: Enhanced bash script for simple deployment
-
-## 🚀 Quick Start
+## Cara Cepat Menjalankan
 
 ### 1. Clone and Setup
 ```bash
@@ -54,60 +53,32 @@ OPENROUTER_API_KEY=your-openrouter-api-key-here
 
 **Note**: The app works fully without OpenRouter - it will use fallback options for AI features.
 
-### 4. 🧠 Knowledge Base Setup (Advanced Feature)
+### 4. Knowledge Base (Qdrant) – Manual Setup
 
-**🎯 Enhanced AI with Agricultural Knowledge Base**
+Platform ini mendukung knowledge base berbasis **Qdrant** untuk pencarian semantik dokumen agrikultura. Di bawah ini panduan *manual* (tanpa skrip otomatis) untuk menyiapkan Qdrant:
 
-The application supports an optional knowledge base feature using Qdrant vector database and SentenceTransformers for more accurate, evidence-based agricultural recommendations.
-
-#### Quick Setup:
 ```bash
-# 1. Install Docker (required for Qdrant)
-# Download from: https://docs.docker.com/get-docker/
+# 1. Pastikan Docker terpasang
+#    Unduh: https://docs.docker.com/get-docker/
 
-# 2. Run the automated setup script
-python setup_qdrant.py
-
-# 3. Start the application - knowledge base will be auto-detected
-./launch.sh
-```
-
-#### Manual Setup:
-```bash
-# 1. Start Qdrant server
-docker run -d --name qdrant-agricultural-kb \
+# 2. Jalankan Qdrant
+docker run -d --name qdrant-tanicerdas \
   -p 6333:6333 -p 6334:6334 \
-  -v ./qdrant_data:/qdrant/storage \
+  -v $(pwd)/qdrant_data:/qdrant/storage \
   qdrant/qdrant:latest
 
-# 2. Install additional dependencies
+# 3. Instal dependensi Python
 pip install sentence-transformers qdrant-client torch transformers
 
-# 3. The application will auto-detect Qdrant and enable knowledge base
+# 4. Jalankan aplikasi
+streamlit run src/main.py
+
+# Aplikasi akan otomatis mendeteksi Qdrant di http://localhost:6333 dan mengaktifkan fitur knowledge base.
 ```
 
-#### 🌟 Knowledge Base Features:
-- **📚 Semantic Search**: Find relevant agricultural knowledge based on context
-- **🔬 Evidence-Based Recommendations**: AI advice enhanced with research data
-- **🌍 Multilingual Support**: Works with Indonesian and English content
-- **🔄 Automatic Fallback**: Works without knowledge base if not available
-- **⚡ Real-time Integration**: Knowledge base queries integrated into AI recommendations
+Jika Qdrant tidak aktif, aplikasi tetap berjalan (fallback) dengan pesan "⚠️ Knowledge base tidak tersedia".
 
-#### 📊 Knowledge Base Benefits:
-- **More accurate recommendations** based on agricultural research
-- **Context-aware advice** that considers local conditions
-- **Scientific references** to support recommendations
-- **Continuous learning** from agricultural knowledge base
-
-#### 🔧 Adding Custom Knowledge:
-1. Prepare PDF documents with agricultural content
-2. Extract text using PDF processing tools
-3. Upload to Qdrant using the agricultural_chatbot.py interface
-4. Knowledge base will automatically enhance AI recommendations
-
-**Status Display**: The application will show "✅ Knowledge base tersedia" when active, or "⚠️ Knowledge base tidak tersedia" when using fallback mode.
-
-### 5. MongoDB Configuration (Automatic)
+### 5. Konfigurasi MongoDB (Otomatis)
 
 **🎉 READY TO USE**: The application comes with a pre-configured MongoDB Atlas database!
 - **Database**: `munawir_datathon2025`  
@@ -143,13 +114,12 @@ streamlit run src/main.py
 streamlit run agricultural_chatbot.py
 ```
 
-## 📁 File Structure
+## Struktur Direktori
 
 ```
 📦 agricultural-decision-support/
 ├── 🚀 launch.sh                      # ⭐ ENHANCED LAUNCHER SCRIPT
 ├── 🔥 agricultural_chatbot.py        # Complete single-file application (with knowledge base)
-├── 🧠 setup_qdrant.py                # Knowledge base setup script
 ├── 🏗️ src/                           # Modular application (recommended)
 │   ├── main.py                      # Main entry point
 │   ├── components/                  # UI components
@@ -168,7 +138,7 @@ streamlit run agricultural_chatbot.py
 └── 📚 qdrant_data/                   # Knowledge base storage (auto-created)
 ```
 
-## 💡 How It Works
+## Cara Kerja Singkat
 
 ### Input Your Field Data
 ```

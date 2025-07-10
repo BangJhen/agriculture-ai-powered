@@ -101,11 +101,8 @@ def display_interaction_history():
                     margin: 6px 0;
                     color: #2c3e50;
                     border: 1px solid #e0e6ed;
-                    transition: all 0.2s ease;
-                    cursor: pointer;
-                    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
-                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 12px rgba(0,0,0,0.15)';" 
-                   onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 1px 6px rgba(0,0,0,0.1)';">
+                    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+                ">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                         <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
                             <span style="font-size: 18px;">{crop_icon}</span>
@@ -123,19 +120,8 @@ def display_interaction_history():
                 </div>
                 """
                 
-                # Create clickable container with improved alignment
-                container_col1, container_col2 = st.columns([8, 2])
-                with container_col1:
-                    st.markdown(card_html, unsafe_allow_html=True)
-                with container_col2:
-                    # Add top margin to align button with card center
-                    st.markdown('<div style="margin-top: 6px;"></div>', unsafe_allow_html=True)
-                    if st.button("📂", key=f"load_{interaction['id']}", help=f"Load {crop_display} from {location_short}", 
-                               use_container_width=True, type="secondary"):
-                        st.session_state.current_interaction_id = interaction['id']
-                        # Restore location data to session state for map display
-                        restore_location_from_interaction(interaction)
-                        st.rerun()
+                # Non-clickable card
+                st.markdown(card_html, unsafe_allow_html=True)
             
             # Add confidence badge if available
             if interaction.get('ml_result') and interaction['ml_result'].get('confidence'):
