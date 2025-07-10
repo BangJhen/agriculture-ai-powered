@@ -10,7 +10,7 @@
 %\documentstyle[nips14submit_09,times,art10]{article} % For LaTeX 2.09
 
 
-\title{Sistem Cerdas Pendukung Keputusan Pertanian Berkelanjutan: Pendekatan Machine Learning untuk Petani Kecil dan Baru di Jawa Barat}
+\title{CropSense: Sistem Cerdas Pendukung Keputusan Pertanian Berkelanjutan Berbasis Machine Learning dan LLM untuk Petani Kecil di Jawa Barat}
 
 
 \author{
@@ -46,7 +46,7 @@ Telkom University \\
 \maketitle
 
 \begin{abstract}
-Sektor pertanian Jawa Barat menghadapi tantangan signifikan yang mengancam ketahanan pangan dan kehidupan petani, khususnya petani kecil dan baru. Dengan kontribusi pertanian sebesar 31,89\% terhadap pertumbuhan ekonomi Jawa Barat pada Q1 2025, mengatasi tantangan ini sangat penting untuk pembangunan daerah. Makalah ini menyajikan analisis komprehensif masalah pertanian di Jawa Barat, dengan fokus pada 21,87\% petani yang kurang memiliki pengetahuan memadai dalam pengelolaan tanah dan tanaman. Isu utama meliputi penurunan kualitas tanah dengan karbon organik di bawah 2\%, dampak perubahan iklim yang menyebabkan 874 hektare gagal panen pada 2023/2024, dan serangan hama yang mempengaruhi 35\% tanaman perkebunan di 14 kabupaten. Melalui pendekatan berbasis data dan machine learning, kami mengusulkan solusi yang menargetkan peningkatan edukasi, praktik pertanian berkelanjutan, strategi adaptasi iklim, dan perbaikan akses pasar untuk mendukung keberlanjutan pertanian dan kesejahteraan petani di Jawa Barat.
+Sektor pertanian Jawa Barat menghadapi tantangan signifikan yang mengancam ketahanan pangan dan kehidupan petani, khususnya petani kecil dan baru. Dengan kontribusi pertanian sebesar 31,89\% terhadap pertumbuhan ekonomi Jawa Barat pada Q1 2025, mengatasi tantangan ini sangat penting untuk pembangunan daerah. Makalah ini menyajikan analisis komprehensif masalah pertanian di Jawa Barat, dengan fokus pada 21,87\% petani yang kurang memiliki pengetahuan memadai dalam pengelolaan tanah dan tanaman. Isu utama meliputi penurunan kualitas tanah dengan karbon organik di bawah 2\%, dampak perubahan iklim yang menyebabkan 874 hektare gagal panen pada 2023/2024, dan serangan hama yang mempengaruhi 35\% tanaman perkebunan di 14 kabupaten. Melalui pendekatan berbasis data dan machine learning, kami mengembangkan CropSense, sebuah sistem cerdas yang mengintegrasikan Random Forest (akurasi 99,5\%) dengan Large Language Models untuk memberikan rekomendasi pertanian berkelanjutan yang menargetkan peningkatan edukasi, praktik ramah lingkungan, strategi adaptasi iklim, dan perbaikan akses pasar untuk mendukung kesejahteraan petani di Jawa Barat.
 \end{abstract}
 
 \section{Pendahuluan}
@@ -60,9 +60,9 @@ Profil demografis tenaga kerja pertanian Jawa Barat mengungkapkan keprihatinan t
 
 Tantangan lingkungan memperparah masalah sumber daya manusia ini. Degradasi kualitas tanah telah menjadi perhatian kritis, dengan kandungan karbon organik di beberapa area turun di bawah 2\%, menandakan degradasi tanah yang parah yang mempercepat kerusakan struktural dan mengurangi kemampuan tanah untuk menyerap dan memanfaatkan pupuk tambahan. Dampak perubahan iklim telah termanifestasi dalam kerugian konkret, dengan 874 hektare sawah mengalami gagal panen selama musim tanam 2023/2024 akibat banjir, kekeringan, dan tanah longsor.
 
-Untuk mengatasi tantangan tersebut, penelitian ini mengembangkan sistem cerdas pendukung keputusan berbasis machine learning yang mengintegrasikan model Random Forest dengan akurasi 99,5\% untuk prediksi kesesuaian tanaman dan Large Language Models (LLM) dengan pendekatan Retrieval Augmented Generation (RAG) untuk memberikan rekomendasi kontekstual tentang pemupukan, pengendalian hama, dan strategi bisnis. Sistem ini menyediakan analisis real-time kondisi tanah berdasarkan parameter N-P-K, pH, suhu, kelembaban, dan curah hujan, serta menghasilkan rekomendasi yang dapat diakses petani melalui aplikasi web interaktif dengan antarmuka yang ramah pengguna, sehingga secara efektif menjembatani kesenjangan pengetahuan dan mendukung transisi menuju pertanian berkelanjutan di Jawa Barat.
+Untuk mengatasi tantangan tersebut, penelitian ini mengembangkan sistem cerdas pendukung keputusan bernama **CropSense** berbasis machine learning yang mengintegrasikan model Random Forest dengan akurasi 99,5\% untuk prediksi kesesuaian tanaman dan Large Language Models (LLM) dengan pendekatan Retrieval Augmented Generation (RAG) untuk memberikan rekomendasi kontekstual tentang pemupukan, pengendalian hama, dan strategi bisnis. Sistem CropSense menyediakan analisis real-time kondisi tanah berdasarkan parameter N-P-K, pH, suhu, kelembaban, dan curah hujan, serta menghasilkan rekomendasi yang dapat diakses petani melalui aplikasi web interaktif dengan antarmuka yang ramah pengguna, sehingga secara efektif menjembatani kesenjangan pengetahuan dan mendukung transisi menuju pertanian berkelanjutan di Jawa Barat.
 
-Kontribusi utama penelitian ini meliputi: (1) pengembangan model Random Forest dengan akurasi 99,5\% untuk prediksi kesesuaian tanaman berbasis kondisi tanah dan lingkungan, (2) implementasi sistem RAG yang mengintegrasikan pengetahuan dari literatur pertanian untuk menghasilkan rekomendasi kontekstual, (3) desain aplikasi web yang accessible bagi petani dengan berbagai tingkat pendidikan, dan (4) evaluasi komprehensif sistem pada kondisi real pertanian Jawa Barat.
+Kontribusi utama penelitian ini meliputi: (1) pengembangan model Random Forest dengan akurasi 99,5\% untuk prediksi kesesuaian tanaman berbasis kondisi tanah dan lingkungan dalam sistem CropSense, (2) implementasi sistem RAG yang mengintegrasikan pengetahuan dari literatur pertanian untuk menghasilkan rekomendasi kontekstual, (3) desain aplikasi web CropSense yang accessible bagi petani dengan berbagai tingkat pendidikan, dan (4) evaluasi komprehensif sistem pada kondisi real pertanian Jawa Barat.
 
 \section{Kajian Teori}
 % TODO: Add literature review content
@@ -289,11 +289,11 @@ Berdasarkan hasil pengujian dan analisis, kami merekomendasikan untuk menggunaka
 
 \subsection{Kesimpulan}
 
-Penelitian ini berhasil mengembangkan sistem cerdas pendukung keputusan pertanian berkelanjutan yang mengintegrasikan machine learning dan Large Language Models untuk mengatasi tantangan pertanian di Jawa Barat. Hasil penelitian menunjukkan bahwa model Random Forest memberikan performa terbaik dengan akurasi 99,55\% dalam prediksi kesesuaian tanaman berdasarkan parameter N-P-K, pH, suhu, kelembaban, dan curah hujan.
+Penelitian ini berhasil mengembangkan sistem cerdas pendukung keputusan pertanian berkelanjutan bernama CropSense yang mengintegrasikan machine learning dan Large Language Models untuk mengatasi tantangan pertanian di Jawa Barat. Hasil penelitian menunjukkan bahwa model Random Forest memberikan performa terbaik dengan akurasi 99,55\% dalam prediksi kesesuaian tanaman berdasarkan parameter N-P-K, pH, suhu, kelembaban, dan curah hujan.
 
-Sistem RAG yang dikembangkan berhasil mengintegrasikan pengetahuan dari literatur pertanian berkelanjutan untuk menghasilkan rekomendasi kontekstual yang relevan. Aplikasi web yang dibangun menyediakan antarmuka yang ramah pengguna dan dapat diakses oleh petani dengan berbagai tingkat pendidikan, sehingga efektif menjembatani kesenjangan pengetahuan yang dialami oleh 21,87\% petani di Jawa Barat.
+Sistem RAG dalam CropSense berhasil mengintegrasikan pengetahuan dari literatur pertanian berkelanjutan untuk menghasilkan rekomendasi kontekstual yang relevan. Aplikasi web CropSense yang dibangun menyediakan antarmuka yang ramah pengguna dan dapat diakses oleh petani dengan berbagai tingkat pendidikan, sehingga efektif menjembatani kesenjangan pengetahuan yang dialami oleh 21,87\% petani di Jawa Barat.
 
-Implementasi sistem ini diharapkan dapat mendukung peningkatan produktivitas pertanian, perbaikan kualitas tanah, dan transisi menuju praktik pertanian berkelanjutan yang pada akhirnya akan meningkatkan kesejahteraan petani kecil dan baru di Jawa Barat.
+Implementasi sistem CropSense diharapkan dapat mendukung peningkatan produktivitas pertanian, perbaikan kualitas tanah, dan transisi menuju praktik pertanian berkelanjutan yang pada akhirnya akan meningkatkan kesejahteraan petani kecil dan baru di Jawa Barat.
 
 \subsection{Saran}
 

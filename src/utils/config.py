@@ -101,10 +101,10 @@ ML_CONFIG = {
 # ==================== UI CONFIGURATION ====================
 
 UI_CONFIG = {
-    'page_title': 'Agricultural Decision Support System',
+    'page_title': 'TaniCerdas Nusantara',  # 🌱 Modern Indonesian agri-tech vibe
     'page_icon': '🌾',
     'layout': 'wide',
-    'sidebar_title': '📋 Agricultural Tools',
+    'sidebar_title': '📋 TaniCerdas Tools',
     'max_interactions_display': 10
 }
 
