@@ -47,6 +47,7 @@ from src.services.knowledge_base import knowledge_base
 from src.services.location_context import location_context_service
 from src.services.recommendation_engine import recommendation_engine
 from src.services.evaluation_service import evaluation_service
+from src.services.weather_service import weather_service
 
 # ==================== APP CONFIGURATION ====================
 
@@ -625,17 +626,7 @@ def display_loaded_interaction_results():
     # AI Results - Comprehensive Analysis Section  
     ai_result = interaction_data.get('ai_result', {})
     if ai_result:
-        st.markdown("### 🤖 Hasil Analisis AI Komprehensif")
-        
-        # Suitability Score
-        suitability_score = ai_result.get('suitability_score', 0.0)
-        confidence_level = ai_result.get('confidence_level', 'medium')
-        
-        result_cols = st.columns(2)
-        with result_cols[0]:
-            st.metric("🎯 Skor Kesesuaian", f"{suitability_score:.1%}")
-        with result_cols[1]:
-            st.metric("📊 Level Confidence", confidence_level.title())
+        st.markdown("### 🤖 Evaluasi Tanaman")
         
         # LLM Analysis
         llm_analysis = ai_result.get('llm_analysis', '')
@@ -822,28 +813,68 @@ def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: D
         
         st.markdown("---")
         
-        # Top Recommendations
-        if 'top_recommendations' in ml_analysis:
-            st.markdown("### 🏆 Top Rekomendasi Tanaman (ML)")
-            
+        # Top Recommendations - only show if there are better alternatives
+        if 'top_recommendations' in ml_analysis and 'confidence' in ml_analysis:
+            selected_crop_confidence = ml_analysis['confidence']
             top_recs = ml_analysis['top_recommendations'][:5]  # Top 5
-            rec_cols = st.columns(len(top_recs))
             
-            for i, (crop, conf) in enumerate(top_recs):
-                with rec_cols[i]:
-                    # Color coding based on confidence
-                    if conf > 0.7:
-                        color = "🟢"
-                    elif conf > 0.5:
-                        color = "🟡" 
-                    else:
-                        color = "🔴"
+            # Check if any recommended crop has higher confidence than selected crop
+            better_alternatives = [
+                (crop, conf) for crop, conf in top_recs 
+                if conf > selected_crop_confidence
+            ]
+            
+            # Only show recommendations if there are better alternatives
+            if better_alternatives:
+                st.markdown("### 🏆 Rekomendasi Tanaman")
+                st.info(f"💡 **Info:** Berikut adalah alternatif tanaman dengan tingkat kesesuaian yang lebih tinggi:")
+                
+                                # Display better alternatives
+                rec_cols = st.columns(len(better_alternatives))
+                
+                for i, (crop, conf) in enumerate(better_alternatives):
+                    with rec_cols[i]:
+                        # Color coding based on confidence
+                        if conf > 0.7:
+                            color = "🟢"
+                            improvement = ((conf - selected_crop_confidence) / selected_crop_confidence) * 100
                     
-                    st.metric(
-                        f"{color} #{i+1}",
-                        crop.title(),
-                        f"{conf:.1%}"
-                    )
+                            st.metric(
+                                label=f"{color} #{i+1}",
+                                value=crop.title(),
+                                delta=f"+{conf:.1%}%"
+                            )
+                        elif i == len(better_alternatives) - 1:
+                            st.markdown(f"Tidak ada Tanaman yang cocok")
+                        
+            else:
+                # User's crop is already optimal - show congratulatory message
+                st.markdown("### Pilihan Tanaman Sudah Optimal")
+                st.success(f"🎉 **Selamat!** Tanaman pilihan Anda **{sensor_data['selected_crop_display']}** sudah merupakan pilihan yang optimal dengan tingkat kesesuaian **{selected_crop_confidence:.1%}** berdasarkan kondisi lahan Anda.")
+                
+                # Optionally show why it's the best choice
+                if top_recs:
+                    with st.expander("🔍 Lihat perbandingan dengan tanaman lain"):
+                        st.markdown("**Perbandingan tingkat kesesuaian:**")
+                        comparison_data = []
+                        
+                        for crop, conf in top_recs:
+                            if crop == sensor_data.get('selected_crop', ''):
+                                comparison_data.append({
+                                    'Tanaman': f"**{crop.title()} (Pilihan Anda)**",
+                                    'Tingkat Kesesuaian': f"**{conf:.1%}**",
+                                    'Status': "✅ **Optimal**"
+                                })
+                            else:
+                                comparison_data.append({
+                                    'Tanaman': crop.title(),
+                                    'Tingkat Kesesuaian': f"{conf:.1%}",
+                                    'Status': "📊 Alternatif"
+                                })
+                        
+                        import pandas as pd
+                        df = pd.DataFrame(comparison_data)
+                        st.table(df)
     else:
         # Fallback if ML not available
         st.warning("⚠️ **Hasil Machine Learning tidak tersedia**")
@@ -890,8 +921,8 @@ def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: D
             )
     
     # Tabs for detailed analysis
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🤖 Analisis AI", "📋 Rekomendasi", "📍 Konteks Lokasi", "⚠️ Risiko", "🔄 Alternatif"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🤖 Analisis AI", "📋 Rekomendasi", "📍 Konteks Lokasi", "⚠️ Risiko", "🔄 Alternatif", "🌤️ Data Cuaca"
     ])
     
     with tab1:
@@ -908,45 +939,587 @@ def display_comprehensive_results(evaluation: Dict[str, Any], location_advice: D
     
     with tab5:
         display_alternatives_tab(evaluation)
+    
+    with tab6:
+        # Get location data for weather tab
+        current_location_data = get_current_location_data()
+        display_weather_tab(current_location_data, sensor_data)
+
+def display_weather_tab(location_data: Dict[str, Any] = None, sensor_data: Dict[str, Any] = None):
+    """Display weather information from OpenMeteo API"""
+    
+    # Get location data if not provided
+    if not location_data:
+        location_data = get_current_location_data()
+    
+    if not location_data or 'coordinates' not in location_data:
+        st.warning("⚠️ **Data cuaca tidak tersedia** - Lokasi belum ditentukan")
+        st.info("💡 **Pilih lokasi terlebih dahulu** menggunakan GPS, map, atau pencarian untuk melihat data cuaca")
+        return
+    
+    coordinates = location_data['coordinates']
+    latitude = coordinates.get('lat')
+    longitude = coordinates.get('lng')
+    
+    if latitude is None or longitude is None:
+        st.error("❌ **Koordinat tidak valid** - Tidak dapat mengambil data cuaca")
+        return
+    
+    # Show loading message
+    with st.spinner("🌤️ Mengambil data cuaca terkini..."):
+        # Get weather data from OpenMeteo API
+        weather_data = weather_service.get_agricultural_weather_summary(latitude, longitude)
+    
+    if weather_data.get('status') == 'fallback':
+        st.error("❌ **API Cuaca Tidak Tersedia**")
+        st.info("🔄 **Coba lagi nanti** - Layanan cuaca OpenMeteo sedang tidak dapat diakses")
+        return
+    
+    # Display location info
+    st.markdown("### 📍 Informasi Lokasi")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "🌐 Garis Lintang", 
+            f"{latitude:.4f}°"
+        )
+    
+    with col2:
+        st.metric(
+            "🌐 Garis Bujur", 
+            f"{longitude:.4f}°"
+        )
+    
+    with col3:
+        elevation = weather_data.get('location', {}).get('elevation', 0)
+        st.metric(
+            "⛰️ Ketinggian", 
+            f"{elevation:.0f} m"
+        )
+    
+    st.markdown("---")
+    
+    # Current Weather
+    st.markdown("### 🌤️ Cuaca Saat Ini")
+    current = weather_data.get('current', {})
+    
+    # Weather overview
+    weather_desc = weather_data.get('weather_description', 'Tidak diketahui')
+    updated_time = weather_data.get('updated_at', '')
+    
+    if updated_time:
+        from datetime import datetime
+        try:
+            update_dt = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+            time_str = update_dt.strftime("%d/%m/%Y %H:%M WIB")
+        except:
+            time_str = updated_time
+    else:
+        time_str = "Tidak diketahui"
+    
+    st.info(f"🌤️ **Kondisi:** {weather_desc} | 🕒 **Diperbarui:** {time_str}")
+    
+    # Current weather metrics
+    current_col1, current_col2, current_col3, current_col4 = st.columns(4)
+    
+    with current_col1:
+        temp = current.get('temperature', 0)
+        st.metric(
+            "🌡️ Suhu Udara",
+            f"{temp:.1f}°C",
+            help="Suhu udara pada ketinggian 2 meter"
+        )
+    
+    with current_col2:
+        humidity = current.get('humidity', 0)
+        st.metric(
+            "💧 Kelembapan",
+            f"{humidity:.0f}%",
+            help="Kelembapan relatif udara"
+        )
+    
+    with current_col3:
+        precipitation = current.get('precipitation', 0)
+        st.metric(
+            "🌧️ Curah Hujan",
+            f"{precipitation:.1f} mm",
+            help="Curah hujan saat ini"
+        )
+    
+    with current_col4:
+        wind_speed = current.get('wind_speed', 0)
+        st.metric(
+            "💨 Kecepatan Angin",
+            f"{wind_speed:.1f} km/h",
+            help="Kecepatan angin pada ketinggian 10 meter"
+        )
+    
+    # Agricultural Analysis
+    if 'agricultural_analysis' in weather_data:
+        st.markdown("---")
+        st.markdown("### 🌾 Analisis Kondisi untuk Pertanian")
+        
+        analysis = weather_data['agricultural_analysis']
+        overall_rating = analysis.get('overall_rating', 'sedang')
+        
+        # Overall rating
+        rating_colors = {
+            'sangat_baik': '🟢',
+            'baik': '🟡', 
+            'sedang': '🟠',
+            'kurang_baik': '🔴'
+        }
+        
+        rating_labels = {
+            'sangat_baik': 'Sangat Baik',
+            'baik': 'Baik',
+            'sedang': 'Sedang', 
+            'kurang_baik': 'Kurang Baik'
+        }
+        
+        rating_color = rating_colors.get(overall_rating, '🟡')
+        rating_label = rating_labels.get(overall_rating, 'Sedang')
+        
+        st.markdown(f"**📊 Rating Keseluruhan:** {rating_color} **{rating_label}**")
+        
+        # Detailed conditions
+        condition_col1, condition_col2 = st.columns(2)
+        
+        with condition_col1:
+            st.markdown("**🌡️ Kondisi Suhu:**")
+            temp_status = analysis.get('temperature_status', 'sedang')
+            temp_color = rating_colors.get(temp_status, '🟡')
+            st.markdown(f"- Suhu Udara: {temp_color} {rating_labels.get(temp_status, 'Sedang')}")
+            
+            soil_temp_status = analysis.get('soil_temp_status', 'sedang')
+            soil_temp_color = rating_colors.get(soil_temp_status, '🟡')
+            st.markdown(f"- Suhu Tanah: {soil_temp_color} {rating_labels.get(soil_temp_status, 'Sedang')}")
+        
+        with condition_col2:
+            st.markdown("**💧 Kondisi Kelembapan:**")
+            humidity_status = analysis.get('humidity_status', 'sedang')
+            humidity_color = rating_colors.get(humidity_status, '🟡')
+            st.markdown(f"- Kelembapan Udara: {humidity_color} {rating_labels.get(humidity_status, 'Sedang')}")
+            
+            soil_moisture_status = analysis.get('soil_moisture_status', 'sedang')
+            soil_moisture_color = rating_colors.get(soil_moisture_status, '🟡')
+            st.markdown(f"- Kelembapan Tanah: {soil_moisture_color} {rating_labels.get(soil_moisture_status, 'Sedang')}")
+    
+    # Soil Conditions
+    st.markdown("---")
+    st.markdown("### 🌱 Kondisi Tanah")
+    
+    soil = weather_data.get('soil', {})
+    soil_temp = soil.get('overall_avg_temp', 0)
+    soil_moisture = soil.get('overall_avg_moisture', 0)
+    
+    soil_col1, soil_col2 = st.columns(2)
+    
+    with soil_col1:
+        st.metric(
+            "🌡️ Suhu Tanah Rata-rata",
+            f"{soil_temp:.1f}°C",
+            help="Rata-rata suhu tanah dari berbagai kedalaman (24 jam terakhir)"
+        )
+        
+        # Soil temperature by depth
+        soil_temps = soil.get('temperature', {})
+        if soil_temps:
+            with st.expander("📊 Detail Suhu Tanah per Kedalaman"):
+                depth_labels = {
+                    'surface': '0 cm (Permukaan)',
+                    'shallow': '6 cm (Dangkal)',
+                    'medium': '18 cm (Sedang)',
+                    'deep': '54 cm (Dalam)'
+                }
+                
+                for depth, temp in soil_temps.items():
+                    if depth in depth_labels:
+                        st.write(f"• **{depth_labels[depth]}:** {temp:.1f}°C")
+    
+    with soil_col2:
+        st.metric(
+            "💧 Kelembapan Tanah Rata-rata",
+            f"{soil_moisture:.3f} m³/m³",
+            help="Rata-rata kelembapan tanah dari berbagai kedalaman (24 jam terakhir)"
+        )
+        
+        # Soil moisture by depth
+        soil_moistures = soil.get('moisture', {})
+        if soil_moistures:
+            with st.expander("📊 Detail Kelembapan Tanah per Kedalaman"):
+                moisture_labels = {
+                    'very_shallow': '0-1 cm (Sangat Dangkal)',
+                    'shallow': '1-3 cm (Dangkal)',
+                    'medium': '3-9 cm (Sedang)',
+                    'deep': '9-27 cm (Dalam)',
+                    'very_deep': '27-81 cm (Sangat Dalam)'
+                }
+                
+                for depth, moisture in soil_moistures.items():
+                    if depth in moisture_labels:
+                        st.write(f"• **{moisture_labels[depth]}:** {moisture:.3f} m³/m³")
+    
+    # Daily Forecast
+    daily_forecast = weather_data.get('daily_forecast', [])
+    if daily_forecast:
+        st.markdown("---")
+        st.markdown("### 📅 Prakiraan 7 Hari ke Depan")
+        
+        forecast_cols = st.columns(min(len(daily_forecast), 7))
+        
+        for i, day_data in enumerate(daily_forecast[:7]):
+            if i < len(forecast_cols):
+                with forecast_cols[i]:
+                    date_str = day_data.get('date', '')
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.fromisoformat(date_str)
+                        day_label = date_obj.strftime("%d/%m")
+                        day_name = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][date_obj.weekday()]
+                    except:
+                        day_label = date_str
+                        day_name = ""
+                    
+                    temp_max = day_data.get('temp_max', 0)
+                    temp_min = day_data.get('temp_min', 0)
+                    precipitation = day_data.get('precipitation', 0)
+                    precip_prob = day_data.get('precipitation_prob', 0)
+                    
+                    st.markdown(f"**{day_name}**")
+                    st.markdown(f"**{day_label}**")
+                    st.markdown(f"🌡️ {temp_max:.0f}°/{temp_min:.0f}°C")
+                    st.markdown(f"🌧️ {precipitation:.1f}mm")
+                    st.markdown(f"☔ {precip_prob:.0f}%")
+    
+    # Additional Info
+    st.markdown("---")
+    st.markdown("### ℹ️ Informasi Tambahan")
+    
+    additional_col1, additional_col2 = st.columns(2)
+    
+    with additional_col1:
+        pressure = current.get('pressure', 0)
+        st.markdown(f"**🌊 Tekanan Udara:** {pressure:.1f} hPa")
+        
+        wind_direction = current.get('wind_direction', 0)
+        st.markdown(f"**🧭 Arah Angin:** {wind_direction:.0f}°")
+    
+    with additional_col2:
+        st.markdown("**📡 Sumber Data:** [OpenMeteo API](https://open-meteo.com)")
+        st.markdown(f"**⏰ Zona Waktu:** Asia/Jakarta (WIB)")
+    
+    # Agricultural recommendations based on weather
+    if sensor_data:
+        st.markdown("---")
+        st.markdown("### 💡 Rekomendasi Berdasarkan Cuaca")
+        
+        selected_crop = sensor_data.get('selected_crop_display', 'tanaman')
+        
+        recommendations = []
+        
+        # Temperature recommendations
+        if temp < 15:
+            recommendations.append("🌡️ **Suhu rendah:** Pertimbangkan penggunaan mulsa atau penutup tanaman untuk melindungi dari dingin")
+        elif temp > 35:
+            recommendations.append("🌡️ **Suhu tinggi:** Pastikan irigasi yang cukup dan pertimbangkan naungan sementara")
+        
+        # Humidity recommendations
+        if humidity > 80:
+            recommendations.append("💧 **Kelembapan tinggi:** Perhatikan sirkulasi udara untuk mencegah penyakit jamur")
+        elif humidity < 40:
+            recommendations.append("💧 **Kelembapan rendah:** Tingkatkan frekuensi penyiraman dan pertimbangkan mulsa")
+        
+        # Precipitation recommendations
+        if precipitation > 20:
+            recommendations.append("🌧️ **Hujan lebat:** Pastikan drainase yang baik untuk mencegah genangan air")
+        elif precipitation == 0 and humidity < 50:
+            recommendations.append("☀️ **Cuaca kering:** Pastikan irigasi yang cukup untuk tanaman")
+        
+        # Soil moisture recommendations
+        if soil_moisture < 0.1:
+            recommendations.append("🌱 **Tanah kering:** Tingkatkan frekuensi irigasi atau gunakan sistem tetes")
+        elif soil_moisture > 0.5:
+            recommendations.append("🌱 **Tanah basah:** Kurangi irigasi dan pastikan drainase yang baik")
+        
+        if recommendations:
+            for rec in recommendations:
+                st.info(rec)
+        else:
+            st.success(f"✅ **Kondisi cuaca saat ini cukup baik untuk pertumbuhan {selected_crop}**")
+
+def analyze_parameter_with_llm(param_name: str, value: float, crop_type: str, all_sensor_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Analyze individual parameter using LLM for intelligent contextual assessment"""
+    
+    try:
+        # Access global LLM service (already initialized in main)
+        global agricultural_llm
+        if 'agricultural_llm' not in globals():
+            # Import if not available globally
+            from src.services.llm_service import agricultural_llm
+        
+        # Prepare context for LLM analysis
+        context = f"""
+        **Analisis Parameter: {param_name}**
+        
+        **Data Tanaman:**
+        - Jenis Tanaman: {crop_type}
+        - {param_name}: {value} {'kg/ha' if param_name.lower() in ['nitrogen', 'phosphorus', 'potassium'] else '°C' if param_name.lower() == 'temperature' else '%' if param_name.lower() == 'humidity' else 'mm' if param_name.lower() == 'rainfall' else ''}
+        
+        **Konteks Parameter Lainnya:**
+        """
+        
+        if all_sensor_data:
+            for key, val in all_sensor_data.items():
+                if key != param_name.lower() and key not in ['selected_crop', 'selected_crop_display', 'location', 'coordinates', 'location_source', 'land_area']:
+                    unit = 'kg/ha' if key in ['nitrogen', 'phosphorus', 'potassium'] else '°C' if key == 'temperature' else '%' if key == 'humidity' else 'mm' if key == 'rainfall' else ''
+                    context += f"- {key.title()}: {val} {unit}\n"
+        
+        # Create prompt for LLM analysis
+        prompt = f"""
+        Sebagai ahli pertanian AI, analisis parameter {param_name} berikut untuk tanaman {crop_type}:
+
+        {context}
+
+        Berikan analisis dalam format JSON berikut (WAJIB gunakan format ini):
+        {{
+            "status": "optimal|good|moderate|poor",
+            "color": "🟢|🟡|🟠|🔴",
+            "details": "penjelasan singkat kondisi parameter",
+            "recommendation": "rekomendasi spesifik dan praktis",
+            "score": "nilai 0-100"
+        }}
+
+        **Panduan Analisis:**
+        1. Pertimbangkan kebutuhan spesifik tanaman {crop_type}
+        2. Evaluasi dalam konteks parameter lainnya  
+        3. Berikan rekomendasi yang praktis dan spesifik untuk petani Indonesia
+        4. Gunakan pengetahuan pertanian modern dan best practices
+        5. Status: optimal (80-100), good (60-79), moderate (40-59), poor (0-39)
+
+        **Berikan hanya JSON response, tanpa teks tambahan lainnya.**
+        """
+
+        # Call LLM for analysis
+        response = agricultural_llm.generate_response(
+            prompt, 
+            context, 
+            temperature=0.3, 
+            max_tokens=300
+        )
+        
+        if response and response.strip():
+            try:
+                # Try to parse JSON response
+                import json
+                import re
+                
+                # Extract JSON from response
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group()
+                    analysis = json.loads(json_str)
+                    
+                    # Validate required keys
+                    required_keys = ['status', 'color', 'details', 'recommendation']
+                    if all(key in analysis for key in required_keys):
+                        return analysis
+                    
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"⚠️ [DEBUG] LLM JSON parsing error for {param_name}: {e}")
+        
+        # Fallback if LLM fails
+        return get_fallback_parameter_analysis(param_name, value, crop_type)
+        
+    except Exception as e:
+        print(f"⚠️ [DEBUG] LLM parameter analysis error for {param_name}: {e}")
+        return get_fallback_parameter_analysis(param_name, value, crop_type)
+
+def get_fallback_parameter_analysis(param_name: str, value: float, crop_type: str) -> Dict[str, Any]:
+    """Fallback analysis when LLM is not available"""
+    
+    # Enhanced rule-based fallback with better logic
+    analysis = {
+        'status': 'moderate',
+        'color': '🟡',
+        'details': f'{param_name} dalam kondisi standar (analisis dasar)',
+        'recommendation': f'Monitor {param_name} secara berkala',
+        'score': 50,
+        'source': 'fallback'  # Indicator that this is fallback analysis
+    }
+    
+    # Parameter-specific analysis with better thresholds
+    param_lower = param_name.lower()
+    
+    if param_lower == 'nitrogen':
+        if value >= 80:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 85, 'details': 'Nitrogen sangat baik untuk pertumbuhan'})
+        elif value >= 50:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 70, 'details': 'Nitrogen cukup baik'})
+        elif value < 20:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 30, 'details': 'Nitrogen sangat rendah'})
+    
+    elif param_lower == 'phosphorus':
+        if value >= 60:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 85, 'details': 'Fosfor excellent untuk pembungaan'})
+        elif value >= 30:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 65, 'details': 'Fosfor cukup baik'})
+        elif value < 15:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 25, 'details': 'Fosfor sangat rendah'})
+    
+    elif param_lower == 'potassium':
+        if value >= 100:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 90, 'details': 'Kalium optimal untuk kualitas hasil'})
+        elif value >= 60:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 70, 'details': 'Kalium baik'})
+        elif value < 30:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 35, 'details': 'Kalium rendah'})
+    
+    elif param_lower == 'ph':
+        if 6.0 <= value <= 7.0:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 95, 'details': 'pH ideal untuk nutrisi'})
+        elif 5.5 <= value < 6.0 or 7.0 < value <= 7.5:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 75, 'details': 'pH dalam rentang baik'})
+        elif value < 5.0 or value > 8.0:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 25, 'details': 'pH ekstrem, berbahaya'})
+    
+    elif param_lower == 'temperature':
+        if 20 <= value <= 30:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 90, 'details': 'Suhu ideal untuk pertumbuhan'})
+        elif 15 <= value < 20 or 30 < value <= 35:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 70, 'details': 'Suhu dalam toleransi'})
+        elif value < 10 or value > 40:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 20, 'details': 'Suhu ekstrem'})
+    
+    elif param_lower == 'humidity':
+        if 60 <= value <= 70:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 85, 'details': 'Kelembaban ideal'})
+        elif 50 <= value < 60 or 70 < value <= 80:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 70, 'details': 'Kelembaban baik'})
+        elif value < 30 or value > 95:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 25, 'details': 'Kelembaban ekstrem'})
+    
+    elif param_lower == 'rainfall':
+        if 150 <= value <= 250:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 85, 'details': 'Curah hujan ideal'})
+        elif 100 <= value < 150 or 250 < value <= 300:
+            analysis.update({'status': 'good', 'color': '🟡', 'score': 70, 'details': 'Curah hujan cukup'})
+        elif value < 50 or value > 400:
+            analysis.update({'status': 'poor', 'color': '🔴', 'score': 30, 'details': 'Curah hujan ekstrem'})
+    
+    # Crop-specific adjustments
+    if crop_type in ['rice']:
+        if param_lower == 'humidity' and value > 75:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 90, 'details': 'Kelembaban tinggi cocok untuk padi'})
+        elif param_lower == 'rainfall' and value > 200:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 85, 'details': 'Curah hujan tinggi baik untuk padi'})
+    
+    elif crop_type in ['cotton']:
+        if param_lower == 'potassium' and value > 80:
+            analysis.update({'status': 'optimal', 'color': '🟢', 'score': 90, 'details': 'Kalium tinggi excellent untuk kapas'})
+    
+    return analysis
 
 def display_ai_analysis_tab(evaluation: Dict[str, Any]):
     """Display AI analysis results"""
     
-    st.markdown("### 🤖 Analisis Artificial Intelligence")
+    st.markdown("### Analisis Paramter")
     
-    # ML Analysis
-    ml_analysis = evaluation.get('ml_analysis', {})
-    if ml_analysis.get('available'):
-        st.markdown("#### 🔬 Analisis Machine Learning")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Prediksi:** {ml_analysis.get('crop_prediction', 'N/A')}")
-            st.markdown(f"**Confidence:** {ml_analysis.get('confidence', 0):.1%}")
-        
-        with col2:
-            if 'top_recommendations' in ml_analysis:
-                st.markdown("**Top Rekomendasi ML:**")
-                for i, (crop, conf) in enumerate(ml_analysis['top_recommendations'][:3], 1):
-                    st.markdown(f"{i}. {crop} ({conf:.1%})")
-        
-        if ml_analysis.get('explanation'):
-            st.markdown("**Penjelasan Model:**")
-            st.markdown(ml_analysis['explanation'])
+    # Get sensor data for parameter analysis
+    sensor_data = evaluation.get('sensor_data', {})
+    selected_crop = sensor_data.get('selected_crop', '')
     
-    # LLM Analysis
-    llm_analysis = evaluation.get('llm_analysis')
-    if llm_analysis and llm_analysis.strip():
-        st.markdown("#### 🧠 Analisis Large Language Model")
-        st.markdown(llm_analysis)
     
-    # Knowledge Base Insights
-    kb_insights = evaluation.get('knowledge_base_insights', [])
-    if kb_insights:
-        st.markdown("#### 📚 Wawasan dari Knowledge Base")
-        for insight in kb_insights[:3]:
-            with st.expander(f"📖 {insight['category'].replace('_', ' ').title()} (Score: {insight['similarity_score']:.2f})"):
-                st.markdown(insight['content'])
+    # Check LLM availability status
+    llm_available = False
+    try:
+        global agricultural_llm
+        if 'agricultural_llm' not in globals():
+            from src.services.llm_service import agricultural_llm
+        llm_available = agricultural_llm.llm_manager.is_available()
+    except:
+        llm_available = False
+    
+    # Show LLM status
+    if not llm_available:
+        st.warning("⚠️ **Status:** Menggunakan analisis dasar (LLM tidak tersedia)")
+    
+    # Define parameters to analyze
+    parameters = [
+        ('Nitrogen', sensor_data.get('nitrogen', 0), 'kg/ha'),
+        ('Phosphorus', sensor_data.get('phosphorus', 0), 'kg/ha'),
+        ('Potassium', sensor_data.get('potassium', 0), 'kg/ha'),
+        ('pH', sensor_data.get('ph', 7.0), ''),
+        ('Temperature', sensor_data.get('temperature', 25), '°C'),
+        ('Humidity', sensor_data.get('humidity', 60), '%'),
+        ('Rainfall', sensor_data.get('rainfall', 150), 'mm'),
+    ]
+    
+    # Create two columns for parameter analysis
+    col1, col2 = st.columns(2)
+    
+    # Analysis with loading indicator
+    with st.spinner("🤖 Menganalisis parameter dengan AI..."):
+        param_analyses = []
+        
+        for i, (param_name, value, unit) in enumerate(parameters):
+            # Get LLM analysis for this parameter
+            analysis = analyze_parameter_with_llm(param_name, value, selected_crop, sensor_data)
+            param_analyses.append(analysis)
+            
+            # Alternate between columns for display
+            with col1 if i % 2 == 0 else col2:
+                with st.container():
+                    st.markdown(f"**{analysis['color']} {param_name}:** {value} {unit}")
+                    
+                    # Status badge with score
+                    score = analysis.get('score', 50)
+                    if analysis['status'] == 'optimal':
+                        st.success(f"✅ **Status:** {analysis['status'].title()} ({score}/100)")
+                    elif analysis['status'] == 'good':
+                        st.info(f"ℹ️ **Status:** {analysis['status'].title()} ({score}/100)")
+                    elif analysis['status'] == 'moderate':
+                        st.warning(f"⚠️ **Status:** {analysis['status'].title()} ({score}/100)")
+                    else:
+                        st.error(f"❌ **Status:** {analysis['status'].title()} ({score}/100)")
+                    
+                    # Details and recommendation
+                    st.caption(f"📝 {analysis['details']}")
+                    if analysis['recommendation']:
+                        st.caption(f"💡 **Rekomendasi:** {analysis['recommendation']}")
+                    
+                    # Show analysis source
+                    if analysis.get('source') == 'fallback':
+                        st.caption("🔧 *Analisis dasar (tidak menggunakan LLM)*")
+                    else:
+                        st.caption("🤖 *Analisis AI/LLM*")
+                    
+                    st.markdown("---")
+    
+    # Overall Parameter Assessment
+    st.markdown("#### 🎯 Ringkasan Status Parameter")
+    
+    # Calculate overall status from already computed analyses
+    optimal_count = sum(1 for a in param_analyses if a['status'] == 'optimal')
+    good_count = sum(1 for a in param_analyses if a['status'] == 'good')
+    moderate_count = sum(1 for a in param_analyses if a['status'] == 'moderate')
+    poor_count = sum(1 for a in param_analyses if a['status'] == 'poor')
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🟢 Optimal", optimal_count, f"{optimal_count/len(parameters)*100:.0f}%")
+    with col2:
+        st.metric("🟡 Baik", good_count, f"{good_count/len(parameters)*100:.0f}%")
+    with col3:
+        st.metric("🟠 Cukup", moderate_count, f"{moderate_count/len(parameters)*100:.0f}%")
+    with col4:
+        st.metric("🔴 Perlu Perbaikan", poor_count, f"{poor_count/len(parameters)*100:.0f}%")
+    
+    # Overall recommendation with average score
+    avg_score = sum(a.get('score', 50) for a in param_analyses) / len(param_analyses)
+
 
 def display_recommendations_tab(evaluation: Dict[str, Any]):
     """Display recommendations"""
@@ -1090,9 +1663,42 @@ def display_alternatives_tab(evaluation: Dict[str, Any]):
     st.markdown("### 🔄 Alternatif Tanaman")
     
     alternatives = evaluation.get('alternative_crops', [])
+    ml_analysis = evaluation.get('ml_analysis', {})
     
+    # Show ML-based alternatives only if they're better than user's choice
+    if ml_analysis.get('available') and 'top_recommendations' in ml_analysis and 'confidence' in ml_analysis:
+        selected_crop_confidence = ml_analysis['confidence']
+        top_recs = ml_analysis['top_recommendations'][:5]
+        
+        better_alternatives = [
+            (crop, conf) for crop, conf in top_recs 
+            if conf > selected_crop_confidence
+        ]
+        
+        if better_alternatives:
+            st.markdown("#### 🌾 Tanaman Alternatif dengan Kesesuaian Lebih Tinggi")
+            st.info(f"Berdasarkan analisis ML, tanaman berikut memiliki tingkat kesesuaian lebih tinggi dari pilihan Anda ({selected_crop_confidence:.1%}):")
+            
+            for i, (crop, conf) in enumerate(better_alternatives, 1):
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    st.markdown(f"**{i}. {crop.replace('_', ' ').title()}**")
+                
+                with col2:
+                    improvement = ((conf - selected_crop_confidence) / selected_crop_confidence) * 100
+                    st.markdown(f"Confidence: {conf:.1%}")
+                    st.markdown(f"*Peningkatan: +{improvement:.1f}%*")
+                
+                with col3:
+                    st.markdown("*Machine Learning*")
+        else:
+            st.markdown("#### ✅ Pilihan Tanaman Optimal")
+            st.success("Tanaman pilihan Anda sudah optimal berdasarkan analisis ML!")
+    
+    # Show other alternatives from evaluation service
     if alternatives:
-        st.markdown("#### 🌾 Tanaman Alternatif yang Direkomendasikan")
+        st.markdown("#### 🔄 Alternatif Lainnya")
         
         for i, alt in enumerate(alternatives, 1):
             col1, col2, col3 = st.columns([2, 1, 1])
@@ -1192,28 +1798,21 @@ def save_comprehensive_results(evaluation: Dict[str, Any], location_advice: Dict
     
     # Save to MongoDB
     if save_interaction_to_db(interaction_data):
-        st.success("✅ **Analisis komprehensif telah disimpan ke database dan history**")
+        st.success("✅ **Analisis telah disimpan ke database dan history**")
         st.session_state.sidebar_mode = 'history'
     else:
-        st.success("✅ **Analisis komprehensif telah disimpan ke session history**")
+        st.success("✅ **Analisis telah disimpan ke session history**")
         st.session_state.sidebar_mode = 'history'
     
     # Show action buttons
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         if st.button("🔄 Analisis Baru", type="secondary"):
-            st.session_state.current_interaction_id = None
-            st.session_state.preset_data = None
-            st.session_state.preset_name = None
+            reset_session_to_default()
             st.rerun()
     
     with col2:
-        if st.button("📋 Lihat History", type="secondary"):
-            st.session_state.sidebar_mode = 'history'
-            st.rerun()
-    
-    with col3:
         if st.button("📊 Status Sistem", type="secondary"):
             with st.expander("🔧 Status Sistem LLM", expanded=True):
                 system_status = evaluation_service.get_service_status()
@@ -1278,6 +1877,63 @@ def display_basic_analysis_fallback(sensor_data: Dict[str, Any]):
 
 # ==================== SIDEBAR ====================
 
+def reset_session_to_default():
+    """Reset entire session state to default values for new analysis"""
+    
+    # Clear all analysis-related data
+    session_keys_to_clear = [
+        'current_interaction_id',
+        'preset_data',
+        'preset_name',
+        #'interaction_history',
+        'loaded_interaction_data',
+        
+        # Location-related data
+        'selected_location',
+        'selected_location_pin',
+        'temp_coordinates',
+        'gps_location_data',
+        'location_source',
+        'pin_mode_active',
+        'gps_completed',
+        
+        # Form and sensor data
+        'current_sensor_data',
+        'backup_sensor_data',
+        'form_submitted',
+        
+        # Modal and analysis states
+        'show_analysis_modal',
+        'modal_stage',
+        'modal_generated_questions',
+        'modal_llm_answers',
+        'analysis_results',
+        
+        # UI states  
+        'show_llm_dialog',
+        'map_center',
+        'map_zoom',
+        'last_clicked_coordinates'
+    ]
+    
+    # Clear specified session state keys
+    for key in session_keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    # Reset sidebar mode to default
+    st.session_state.sidebar_mode = 'new'
+    
+    # Reset location tab to default
+    if 'location_tab' in st.session_state:
+        st.session_state.location_tab = 'GPS'
+    
+    # Reset map state to default
+    st.session_state.map_center = [-6.2088, 106.8456]  # Default Jakarta
+    st.session_state.map_zoom = 10
+    
+    print("✅ Session state reset to default - ready for new analysis")
+
 def display_sidebar():
     """Display sidebar with history and controls - Enhanced with better integration"""
     
@@ -1303,10 +1959,9 @@ def display_sidebar():
     with col2:
         new_label = "➕ New" + (" ✨" if preset_loaded else "")
         if st.button(new_label, type="primary" if st.session_state.sidebar_mode == 'new' else "secondary"):
-            st.session_state.sidebar_mode = 'new'
-            # Only clear if switching from history mode, preserve preset
-            if not preset_loaded:
-                st.session_state.current_interaction_id = None
+            reset_session_to_default()
+            st.session_state.sidebar_mode = 'history'
+            st.rerun()
     
     st.sidebar.markdown("---")
     
@@ -1314,9 +1969,6 @@ def display_sidebar():
     if st.session_state.sidebar_mode == 'history':
         from src.components.history_panel import display_interaction_history
         display_interaction_history()
-    else:
-        from src.components.history_panel import display_new_interaction_form
-        display_new_interaction_form()
 
 # ==================== MAIN APPLICATION ====================
 
@@ -1359,59 +2011,8 @@ def main():
             st.markdown("---")
             display_analysis_results(sensor_data)
     
-    # Development notes
-    with st.expander("🔧 LLM-Enhanced Agricultural Decision Support System", expanded=False):
-        st.markdown("""
-        ### 📁 Complete LLM-Enhanced Modular Structure:
         
-        ```
-        src/
-        ├── utils/
-        │   ├── config.py              ✅ Configuration & settings
-        │   └── helpers.py             ✅ Utility functions
-        ├── services/
-        │   ├── database.py            ✅ MongoDB operations
-        │   ├── location.py            ✅ GPS & geocoding
-        │   ├── mapping.py             ✅ Map functionality
-        │   ├── llm_service.py         ✅ LLM integration (Ollama + OpenRouter)
-        │   ├── knowledge_base.py      ✅ Qdrant vector database
-        │   ├── location_context.py    ✅ Location-specific analysis
-        │   ├── recommendation_engine.py ✅ ML+LLM recommendations
-        │   └── evaluation_service.py   ✅ Comprehensive evaluation
-        ├── core/
-        │   └── ml_predictor.py        ✅ AI/ML models
-        └── main.py                    ✅ Main LLM-enhanced application
-        ```
-        
-        ### 🤖 **LLM Features Implemented:**
-        - **Multi-LLM Support**: Ollama (local) + OpenRouter (cloud) with intelligent fallback
-        - **Knowledge Base**: Qdrant vector database with Indonesian agricultural knowledge
-        - **Comprehensive Evaluation**: ML + LLM + Knowledge Base integration
-        - **Location Context**: Regional agricultural insights for Indonesia
-        - **Risk Assessment**: Environmental, nutritional, and location-based risks
-        - **Alternative Recommendations**: Crop alternatives based on conditions
-        - **Optimization Suggestions**: Step-by-step improvement plans
-        
-        ### 📊 **System Status:** Real-time monitoring of all LLM services
-        """)
-        
-        # Show real-time system status
-        system_status = evaluation_service.get_service_status()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**🤖 LLM Services:**")
-            llm_status = system_status.get('llm_service', {})
-            st.markdown(f"- Ollama: {'✅ Available' if llm_status.get('ollama', {}).get('available') else '❌ Unavailable'}")
-            st.markdown(f"- OpenRouter: {'✅ Available' if llm_status.get('openrouter', {}).get('available') else '❌ Unavailable'}")
-        
-        with col2:
-            st.markdown("**📚 Knowledge Systems:**")
-            kb_status = system_status.get('knowledge_base', {})
-            st.markdown(f"- Knowledge Base: {'✅ Active' if kb_status.get('available') else '❌ Inactive'}")
-            st.markdown(f"- ML Predictor: {'✅ Loaded' if system_status.get('ml_predictor', {}).get('available') else '❌ Error'}")
-        
-        st.markdown(f"**📊 Knowledge Count:** {kb_status.get('knowledge_count', 0)} entries")
+        # Show real-time system statu
 
 if __name__ == "__main__":
     main() 
