@@ -367,7 +367,7 @@ def display_sensor_form():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("###Nutrisi Tanah")
+            st.markdown("### Nutrisi Tanah")
             nitrogen = st.number_input(
                 "Nitrogen (N)", 
                 min_value=SENSOR_PARAMS['nitrogen']['min'],
@@ -408,7 +408,7 @@ def display_sensor_form():
                 disabled=not location_available
             )
             
-            st.markdown("###Luas Lahan")
+            st.markdown("### Luas Lahan")
             land_area = st.number_input(
                 "Luas Lahan Pertanian",
                 min_value=SENSOR_PARAMS['land_area']['min'],
@@ -420,7 +420,7 @@ def display_sensor_form():
             )
         
         with col2:
-            st.markdown("###Kondisi Lingkungan")
+            st.markdown("### Kondisi Lingkungan")
             temperature = st.number_input(
                 "Temperature",
                 min_value=SENSOR_PARAMS['temperature']['min'],
